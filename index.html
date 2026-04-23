@@ -1,0 +1,1822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Snowkoban</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000; width:100vw; height:100vh; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+canvas { display:block; image-rendering:pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+// ── Level data ────────────────────────────────────────────────────────────────
+const WORLD_DATA = [
+{ name:'noice', levels:[
+`first level
+#####
+## t#
+# b #
+#   #
+##p##
+#####`,
+`second level
+######
+#t t##
+##   #
+##b  #
+## b #
+##   #
+###p##
+######`,
+`one step forward, 2 steps back
+########
+# tb   #
+#p #   #
+# bt   #
+########`,
+`sticky
+########
+#     p#
+#   bb #
+#  #####
+#     t#
+#     t#
+########`,
+`sticky 2
+##########
+#        #
+# t      #
+# #### # #
+#      # #
+# bp # # #
+#    #   #
+##########`,
+`sticky 3
+######
+#    #
+# pbt#
+#    #
+#    #
+#    #
+#    #
+#   b#
+# t  #
+######`,
+]},
+{ name:'iceworld', levels:[
+`ice to meet you
+#########
+######T##
+#TB/////#
+#P////B/#
+#///////#
+#///////#
+#//////##
+#########`,
+`maze 1
+##############
+#########/####
+#########/T###
+##/////////###
+#//PB//////###
+###//////////#
+###//////////#
+###//#//#/#//#
+##############`,
+`Patience
+##########
+#tb  #####
+# #////BT#
+#  //#####
+#  //#####
+# p/######
+##########`,
+`block puzzle
+###########
+#  b     t#
+#     /  t#
+#    #b#  #
+#p        #
+###########`,
+`cross
+#########
+####t##t#
+#  #/## #
+#  /B/t #
+#  #/## #
+#  #b# b#
+#   p   #
+#########`,
+`diode
+#########
+#tb     #
+####### #
+#tb   # #
+#  #  # #
+#  /  # #
+###/### #
+#p      #
+#########`,
+`I
+#############
+######t######
+###### ######
+######/######
+######/######
+#   ##/######
+# b //P//  t#
+# # ##/######
+# / ##/######
+##/###/######
+#       #####
+#     b #####
+#       #####
+#############`,
+`one way street
+#################
+#    # /////////#
+#      /////////#
+#    / /////////#
+#tt##/##/#//////#
+#####/#////////##
+#    /#////////##
+#  b /b////////##
+# p  /#///////###
+#    /#///#/////#
+#####/###########
+#################`,
+]},
+{ name:"crate o'clock", levels:[
+`crate to meet you
+#########
+####t####
+#   c   #
+#    b  #
+#  p    #
+#########`,
+`assist
+########
+#####t##
+#pb////#
+#  ////#
+#  ////#
+#    c #
+#      #
+########`,
+`Overshoot
+##########
+#        #
+# #T    t#
+# #b  c B#
+#  p     #
+##########`,
+`tight
+##########
+##     ###
+##     #T#
+##pBC////#
+###//////#
+###/////##
+##########`,
+`did some carbon based lifeform just say ice?
+#######
+## p ##
+# C// #
+# /// #
+#t//B #
+##   ##
+#######`,
+`corner
+############
+#  #########
+#     c  ###
+# ##  b  ###
+# c/     ###
+### ####/###
+### ##t / ##
+### ##### ##
+###p      ##
+############`,
+`sequence 2
+###################
+#/////////////TT/T#
+## #    ###########
+##  c  b###########
+##   bb ###########
+##p     ###########
+###################`,
+`2 roads
+##############
+#tc      #   #
+#///////////T#
+#        #   #
+# ###### #####
+# ###### #####
+# ###### #####
+#   bb   #####
+#        #####
+#   p    #####
+#        #####
+##############`,
+`I swear we had this before
+###############
+#      t      #
+#             #
+#######/#######
+#   ###/###   #
+# b ###/###   #
+#   ///P///   #
+#   ###/###   #
+#   ###/###  t#
+#######/#######
+# b      cccc #
+#             #
+###############`,
+]},
+{ name:'ring sting', levels:[
+`line em up
+##########
+##T#######
+##//////T#
+##/b  b/##
+##/  p /##
+##/b  b/##
+#T//////##
+#######T##
+##########`,
+`ringy ding
+########
+#T/////#
+##/ bb/#
+##/   T#
+##/ b /#
+##/ p /#
+##/////#
+##T#####
+########`,
+`ringy dingy
+########
+##T#####
+#T/////#
+##/ bb/#
+##/   T#
+##/ b /#
+##/ p /#
+##/////#
+########`,
+`slippery foundation
+#############
+##/////////##
+##/  cc   /##
+#T////B/////#
+##/b p    /##
+##/////////##
+##########T##
+#############`,
+]},
+{ name:'lattice pray', levels:[
+`ice diamond
+#######
+# cp  #
+# t/ c#
+# /b/ #
+#  /  #
+#     #
+#######`,
+`promotion
+##########
+# /p/ / /#
+#/ / / / #
+# / / / /#
+#/ /b/ / #
+# / / / /#
+#/ / / / #
+# / / / /#
+#/ /t/ / #
+##########`,
+`encircled
+############
+#//////////#
+#/p/ / / //#
+#// / / / /#
+#/ / /c/ //#
+#// /b/ / /#
+#/ /b/ / //#
+#// / / / /#
+#/ / / / //#
+#/T / / /t/#
+#//////////#
+############`,
+`lattice rules
+#############
+#P/ // // //#
+#/ // // // #
+# // // // /#
+#//c// // //#
+#/ //b// // #
+# // // // /#
+#//t// // //#
+#/ // // // #
+#############`,
+]},
+{ name:'the good levels', levels:[
+`icey nicey
+#############
+#  /  #  /  #
+# c/p # c/b #
+#///////////#
+# c/  # c/  #
+#  /  #  /  #
+###/#####/###
+#  /  #  /  #
+#  /  #  /c #
+#T/B////////#
+#  /  #  /  #
+#  /  #  / t#
+#############`,
+`ratchet
+#############
+########    #
+######## c  #
+########  /##
+#///P//////##
+##/#######/##
+##/##   ##/##
+##    b   /##
+##/##   ##/##
+##/#######/##
+##//////////#
+##T##########
+#############`,
+`3 pointer
+#########
+#       #
+#     c #
+#  ### ##
+# /////T#
+# /////##
+# //##b #
+##//  p #
+#########`,
+`ice rings
+####################
+#P/////////       t#
+#/########/#   c   #
+#/########/#  cbc  #
+#/########/#   c   #
+#/########/####    #
+#/####//////////####
+#/####B###/####/####
+#//////////####/####
+# ####/########/####
+# ####/########/####
+# ####/########/####
+#    #/########/####
+#t    //////////####
+####################`,
+]},
+{ name:'the nightmare zone', levels:[
+`Flintlock
+##############
+# p     ######
+#    c  ######
+#   c   ######
+### #/###/####
+#///C///T////#
+#####/#/#/####
+#     c  /  ##
+#   c b     ##
+#           ##
+##############`,
+`Eeek
+################
+################
+##########///###
+##///////////#/#
+##/##//////C/#/#
+##/#/B/////////#
+##P//////////#T#
+####//C//////#/#
+####//// c /   #
+####//// c / c #
+####/######/   #
+####////////#  #
+###########/####
+################`,
+`squeeze
+#t######
+#      #
+# #b # #
+# //c/t#
+## bp b#
+####t  #
+#### c #
+####   #
+########`,
+]},
+{ name:'water', levels:[
+`nice to sea you
+#########
+####t####
+#### ####
+#wwwwwww#
+#wwwwwww#
+#w     w#
+#w cpc w#
+#w  b  w#
+#w     w#
+#wwwwwww#
+#########`,
+`special delivery
+#########
+#     Tww
+#   b /ww
+#     /ww
+#  p  /ww
+#     /w#
+#     /ww
+# c   /ww
+# c   /ww
+#     /##
+#########`,
+`hole punch
+##################
+#  w#            #
+#  b#            #
+#  t ////////////#
+#    ////////////#
+#####wwwcwwcwwcww#
+#####            #
+#####p           #
+##################`,
+`rescue mission
+############
+#wwwwwwwwww#
+#wwwwbwwwww#
+#wwwwwwwwww#
+###//////###
+# p//////  #
+#  //////  #
+#ww    c   #
+#ww  ccc   #
+#ww  ccc   #
+#ww  t     #
+############`,
+`sequence 3
+#################
+#/////////w/Tw/T#
+##   cc   #######
+##   cc   #######
+## p bb   #######
+##        #######
+#################`,
+]},
+{ name:'multiplayer', levels:[
+`multiplayer 1
+###############
+#w    pbpt   w#
+###############
+#             #
+#             #
+#      p      #
+#tb    #    bt#
+###############`,
+`lock
+###########
+# #t# #w# #
+#t#b#w# # #
+#b# # # # #
+#p#p#p#p#p#
+#w# #b#b# #
+# # #t#t#b#
+# # # # #t#
+###########`,
+`doublelock
+#############
+#  #  #  #  #
+#b #  # t# t#
+#t #  # b# b#
+#w #  #  #  #
+#w #  #  #  #
+#p #p #p #pw#
+#  #  #  # ##
+#  # b#ww#  #
+#  # t#ww#  #
+#############`,
+`multiplayer 4
+##################
+#       #   ww  t#
+#   cb  #        #
+#w      #        #
+#  ##   #  ##    #
+#   # ww# b #    #
+#pw # wt#p  #    #
+##################`,
+`multiplayer 5
+#################
+#             #/#
+#t            B/#
+#             #/#
+#      c       /#
+#              /#
+#             ###
+#/////////////BT#
+#  w          ###
+#ppw            #
+#################`,
+`march of thousands
+########
+#      #
+#  t   #
+#  b   #
+#      #
+#      #
+#wwwwww#
+#wwwwww#
+#wwwwww#
+#wwwwww#
+#wwwwww#
+#      #
+#  #   #
+# p    #
+#  pp  #
+# ppp  #
+#      #
+#      #
+########`,
+`mirrorverse
+###############
+#p     #p     #
+#    c #  w c #
+#  b   #  b   #
+#      #      #
+# c  T # c  T #
+#      #      #
+###############
+#p     #p     #
+#    c #    c #
+#  b   #  bw  #
+#  w   #      #
+# c  T # c  T #
+#      #      #
+###############`,
+`prison break
+################
+#tbw           #
+####           #
+#              #
+#              #
+#         wwwww#
+#         cw p #
+#  p       w   #
+#    /     w   #
+#          wwww#
+################`,
+`pp world
+################
+#       wbt#####
+#       ########
+#   w###########
+#   w#w   /   w#
+#w ww#w       w#
+#w            w#
+#wpp          w#
+################`,
+`reunion
+########################
+#                 wbt###
+#w#########w############
+# w       # w       ####
+# w       #     /   ####
+# w       #  wwwwww ####
+#         ##        ####
+# c   wwww#wcww     ####
+#        p#        p####
+########################`,
+`only up
+##############
+#         #p##
+# #        bt#
+# #        w##
+# # ##########
+# #//////////#
+# ##########/#
+#p///////////#
+##############`,
+]},
+{ name:'other levels', levels:[
+`water gay
+#######
+###T###
+###/###
+###/###
+##//  #
+##/// #
+##//B #
+## /B #
+# /p  #
+#  / ##
+#  //##
+# c//##
+#  //##
+###/###
+###/###
+###T###
+#######`,
+`railgun
+#########
+####t####
+####t####
+####t####
+#t  /   #
+# #b/ b #
+# # /   #
+# # /b  #
+#p# /   #
+####/## #
+####B   #
+####/ ###
+####/   #
+####/####
+#########`,
+`loom
+#############
+#  ///#///###
+#  ///////tt#
+# b//#////###
+# b///////tt#
+# b/////#/###
+#  ///////tt#
+# #///////###
+#  bbb      #
+#p          #
+#############`,
+`long way
+###############
+#######T#######
+#      /     t#
+#  p   B      #
+#      /      #
+#######/      #
+#######/      #
+#######/      #
+#   b  /      #
+#      /      #
+#      /#######
+#      /#######
+###############`,
+`block puzzle 3
+###########
+# b    t  #
+#    /t # #
+#   #b#b# #
+#p     t  #
+###########`,
+`sequence 4
+############
+#####T######
+#####/######
+#T////   ###
+#####/## ###
+#####/   ###
+#####/######
+#   #/     #
+#   #/     #
+#    /     #
+# cbb/     #
+# p  /#    #
+# c  /#    #
+#    /#    #
+#    /#    #
+#####/######
+############`,
+]},
+];
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const T_NONE=0, T_WALL=1, T_SNOW=2, T_ICE=3, T_HOLE=4, T_WATER=5;
+const ET_PLAYER=1, ET_PRESENT=2, ET_CRATE=3, ET_TARGET=4;
+
+// Spritesheet clips [sx, sy, sw, sh] all 16×16 from snowkoban.png
+const SP = {
+  wall:     [0,0,16,16],
+  snow:     [16,0,16,16],
+  iceBg:    [32,0,16,16],
+  ice:      [32,16,16,16],
+  present:  [48,0,16,16],
+  player0:  [64,0,16,16],
+  player1:  [64,16,16,16],
+  target:   [80,0,16,16],
+  crate:    [96,0,16,16],
+  hole:     [112,0,16,16],
+  waterBg:  [128,0,16,16],
+  water:    [128,16,16,16],
+};
+
+const TILE_CLIP = {
+  [T_WALL]: SP.wall, [T_SNOW]: SP.snow, [T_ICE]: SP.ice,
+  [T_HOLE]: SP.hole, [T_WATER]: SP.water, [T_NONE]: SP.hole,
+};
+const ENTITY_CLIP = {
+  [ET_PLAYER]: SP.player0, [ET_PRESENT]: SP.present,
+  [ET_CRATE]: SP.crate, [ET_TARGET]: SP.target,
+};
+const ENTITY_BASE_H = { [ET_PLAYER]:0, [ET_PRESENT]:1, [ET_CRATE]:1, [ET_TARGET]:0 };
+
+// ── Hash / easing ─────────────────────────────────────────────────────────────
+function hash(n) {
+  let m = n >>> 0;
+  m = (m * 0xB5297A4D) >>> 0;
+  m ^= (m >>> 8);
+  m = (m + 0x68E31DA4) >>> 0;
+  m ^= (m << 8);
+  m = (m * 0x1B56C4E9) >>> 0;
+  m ^= (m >>> 8);
+  return m >>> 0;
+}
+function hashF(seed, lo, hi) { return lo + (hash(seed) / 0xFFFFFFFF) * (hi - lo); }
+function hashI(seed, lo, hi) { return lo + (hash(seed) % (hi - lo)); }
+
+function slowStop(t)  { const s = t*(2-t); return s*(2-s); }
+function slowStart(t) { const s = t*t;     return s*s; }
+function lerp(a,b,t)  { return a + (b-a)*t; }
+function clamp(x,a,b) { return x<a?a:x>b?b:x; }
+function frac(x)      { return x - Math.floor(x); }
+
+function slowStartStop3(t) {
+  function ss(x){ return lerp(x*x, 1-(1-x)*(1-x), x); }
+  return ss(ss(ss(t)));
+}
+
+// ── Level parser ──────────────────────────────────────────────────────────────
+function parseLevel(str) {
+  const nl = str.indexOf('\n');
+  const title = nl >= 0 ? str.slice(0, nl) : str;
+  const rows = (nl >= 0 ? str.slice(nl+1) : '').split('\n').filter(l => l.length > 0);
+  if (!rows.length) return null;
+  const H = rows.length, W = rows[0].length;
+  const tiles = Array.from({length:H}, () => new Array(W).fill(T_SNOW));
+  const entities = [];
+  for (let j = 0; j < H; j++) {
+    const row = rows[j];
+    for (let i = 0; i < W; i++) {
+      const ch = i < row.length ? row[i] : ' ';
+      if      (ch === '#')              tiles[j][i] = T_WALL;
+      else if (ch === '/')              tiles[j][i] = T_ICE;
+      else if (ch === 'h')              tiles[j][i] = T_HOLE;
+      else if (ch === 'w')              tiles[j][i] = T_WATER;
+      else if ('PTBC'.includes(ch))     tiles[j][i] = T_ICE;
+      else                              tiles[j][i] = T_SNOW;
+      const l = ch.toLowerCase();
+      let et = 0;
+      if      (l==='p') et = ET_PLAYER;
+      else if (l==='b') et = ET_PRESENT;
+      else if (l==='c') et = ET_CRATE;
+      else if (l==='t') et = ET_TARGET;
+      if (et) entities.push({et, x:i, y:j, dx:0, dy:0, pdx:0, pdy:0, sunk:false});
+    }
+  }
+  return {title, W, H, tiles, entities};
+}
+
+// ── Game logic ────────────────────────────────────────────────────────────────
+function getMovableAt(entities, x, y) {
+  for (let i = 0; i < entities.length; i++) {
+    const e = entities[i];
+    if (e.et !== ET_TARGET && !e.sunk && e.x === x && e.y === y) return i;
+  }
+  return -1;
+}
+
+function canMove(tiles, entities, W, H, idx, dx, dy) {
+  const e = entities[idx];
+  if (e.sunk) return false;
+  const nx = e.x+dx, ny = e.y+dy;
+  if (nx<0||ny<0||nx>=W||ny>=H) return false;
+  const t = tiles[ny][nx];
+  if (t===T_NONE||t===T_WALL) return false;
+  const di = getMovableAt(entities, nx, ny);
+  if (di === -1) return true;
+  return canMove(tiles, entities, W, H, di, dx, dy);
+}
+
+function moveEntity(tiles, entities, W, H, idx, dx, dy, sfx) {
+  if (!canMove(tiles, entities, W, H, idx, dx, dy)) return false;
+  const e = entities[idx];
+  e.dx = dx; e.dy = dy;
+  const nx = e.x+dx, ny = e.y+dy;
+  const t = tiles[ny][nx];
+  if (t===T_SNOW||t===T_ICE) {
+    if (t===T_SNOW && sfx) sfx('step');
+    if (t===T_ICE  && sfx) sfx('slip');
+  }
+  const di = getMovableAt(entities, nx, ny);
+  if (di !== -1) {
+    moveEntity(tiles, entities, W, H, di, dx, dy, sfx);
+    return true;
+  }
+  if (e.et===ET_PRESENT) {
+    const onTarget = entities.some(t2 => t2.et===ET_TARGET && t2.x===nx && t2.y===ny);
+    if (onTarget && sfx) sfx('movefinal');
+  }
+  return true;
+}
+
+function levelStep(tiles, entities) {
+  for (const e of entities) {
+    e.x += e.dx; e.y += e.dy;
+    if (tiles[e.y] && tiles[e.y][e.x] === T_WATER) {
+      const otherSunk = entities.some(e2 => e2!==e && e2.x===e.x && e2.y===e.y && e2.sunk);
+      if (!otherSunk) e.sunk = true;
+    }
+    e.pdx = e.dx; e.pdy = e.dy;
+    e.dx = 0; e.dy = 0;
+  }
+}
+
+function doIce(tiles, entities, W, H, sfx) {
+  let any = false;
+  for (let i = 0; i < entities.length; i++) {
+    const e = entities[i];
+    if (e.pdx===0 && e.pdy===0) continue;
+    if (tiles[e.y] && tiles[e.y][e.x]===T_ICE && canMove(tiles, entities, W, H, i, e.pdx, e.pdy)) {
+      moveEntity(tiles, entities, W, H, i, e.pdx, e.pdy, sfx);
+      any = true;
+    }
+  }
+  return any;
+}
+
+function checkVictory(entities) {
+  const targets = entities.filter(e => e.et===ET_TARGET);
+  if (!targets.length) return false;
+  return targets.every(t => entities.some(e => e.et===ET_PRESENT && e.x===t.x && e.y===t.y));
+}
+
+function deepCopyEntities(entities) {
+  return entities.map(e => ({...e}));
+}
+
+// ── WebGL renderer ────────────────────────────────────────────────────────────
+const VS = `
+attribute vec2 a_pos;
+attribute vec2 a_uv;
+attribute vec4 a_col;
+uniform vec2 u_res;
+varying vec2 v_uv;
+varying vec4 v_col;
+void main(){
+  vec2 c=(a_pos/u_res)*2.0-1.0;
+  gl_Position=vec4(c.x,-c.y,0.0,1.0);
+  v_uv=a_uv; v_col=a_col;
+}`;
+const FS = `
+precision mediump float;
+uniform sampler2D u_tex;
+varying vec2 v_uv;
+varying vec4 v_col;
+void main(){ gl_FragColor=texture2D(u_tex,v_uv)*v_col; }`;
+
+const MAX_QUADS = 16384;
+const FPV = 8; // floats per vertex: x,y,u,v,r,g,b,a
+
+class Renderer {
+  constructor(canvas) {
+    this.canvas = canvas;
+    const gl = canvas.getContext('webgl', {alpha:false});
+    if (!gl) throw new Error('WebGL not available');
+    this.gl = gl;
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    const mkSh = (type, src) => {
+      const s = gl.createShader(type);
+      gl.shaderSource(s, src); gl.compileShader(s);
+      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+        throw new Error(gl.getShaderInfoLog(s));
+      return s;
+    };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, mkSh(gl.VERTEX_SHADER, VS));
+    gl.attachShader(prog, mkSh(gl.FRAGMENT_SHADER, FS));
+    gl.linkProgram(prog);
+    this.prog = prog;
+    this.aPos = gl.getAttribLocation(prog,'a_pos');
+    this.aUV  = gl.getAttribLocation(prog,'a_uv');
+    this.aCol = gl.getAttribLocation(prog,'a_col');
+    this.uRes = gl.getUniformLocation(prog,'u_res');
+    this.uTex = gl.getUniformLocation(prog,'u_tex');
+
+    this.buf = new Float32Array(MAX_QUADS * 6 * FPV);
+    this.vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, this.buf.byteLength, gl.DYNAMIC_DRAW);
+
+    this.count = 0;
+    this.curTex = null;
+    this.whiteTex = this._white();
+    this.ssTex = null; this.ssW = 0; this.ssH = 0;
+    this.fontTex = null; this.fontW = 0; this.fontH = 0;
+    // per-level preview textures: array of {tex,w,h} or null
+    this.previews = [];
+  }
+
+  _white() {
+    const gl = this.gl;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array([255,255,255,255]));
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+    return t;
+  }
+
+  _upload(src, nearest=true) {
+    const gl = this.gl;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,src);
+    const f = nearest ? gl.NEAREST : gl.LINEAR;
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,f);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,f);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    return t;
+  }
+
+  loadSpritesheet(img) {
+    this.ssTex = this._upload(img);
+    this.ssW = img.width; this.ssH = img.height;
+  }
+
+  loadFont(img) {
+    // Replace magenta with transparent
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img,0,0);
+    const id = ctx.getImageData(0,0,img.width,img.height);
+    for (let i=0;i<id.data.length;i+=4)
+      if (id.data[i]===255&&id.data[i+1]===0&&id.data[i+2]===255) id.data[i+3]=0;
+    ctx.putImageData(id,0,0);
+    this.fontTex = this._upload(c);
+    this.fontW = img.width; this.fontH = img.height;
+  }
+
+  buildPreviews(parsedLevels) {
+    // parsedLevels: flat array of {parsed, worldIdx, levelIdx}
+    const BOX = 200;
+    this.previews = parsedLevels.map(({parsed}) => {
+      if (!parsed) return null;
+      const {W,H,tiles,entities} = parsed;
+      const ppt = Math.max(1, Math.min(Math.floor(BOX/W), Math.floor(BOX/H)));
+      const pw = ppt*W, ph = ppt*H;
+      const c = document.createElement('canvas');
+      c.width = c.height = BOX;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle='#000'; ctx.fillRect(0,0,BOX,BOX);
+      const tmpImg = document.createElement('canvas');
+      tmpImg.width = this.ssW; tmpImg.height = this.ssH;
+      const tc = tmpImg.getContext('2d');
+      // Draw spritesheet to temp canvas so we can use drawImage
+      // We already have the image; re-use it via a global ref
+      tc.drawImage(window._ssImg, 0, 0);
+      const ox = Math.floor((BOX-pw)/2), oy = Math.floor((BOX-ph)/2);
+      // Background: fill with wall
+      for (let jj=0;jj<Math.ceil(BOX/ppt)+1;jj++)
+        for (let ii=0;ii<Math.ceil(BOX/ppt)+1;ii++) {
+          const [sx,sy]=SP.wall;
+          ctx.drawImage(tmpImg,sx,sy,16,16,ii*ppt,jj*ppt,ppt,ppt);
+        }
+      // Ice bg
+      for (let j=0;j<H;j++) for (let i=0;i<W;i++) {
+        if (tiles[j][i]===T_ICE) {
+          const [sx,sy]=SP.iceBg;
+          ctx.drawImage(tmpImg,sx,sy,16,16,ox+i*ppt,oy+j*ppt,ppt,ppt);
+        }
+        if (tiles[j][i]===T_WATER) {
+          const [sx,sy]=SP.waterBg;
+          ctx.drawImage(tmpImg,sx,sy,16,16,ox+i*ppt,oy+j*ppt,ppt,ppt);
+        }
+      }
+      // Tiles
+      for (let j=0;j<H;j++) for (let i=0;i<W;i++) {
+        const cl = TILE_CLIP[tiles[j][i]];
+        if (!cl) continue;
+        ctx.drawImage(tmpImg,cl[0],cl[1],16,16,ox+i*ppt,oy+j*ppt,ppt,ppt);
+      }
+      // Entities
+      for (const e of entities) {
+        const cl = ENTITY_CLIP[e.et];
+        if (!cl) continue;
+        ctx.drawImage(tmpImg,cl[0],cl[1],16,16,ox+e.x*ppt,oy+e.y*ppt,ppt,ppt);
+      }
+      return {tex: this._upload(c), w: BOX, h: BOX};
+    });
+  }
+
+  _useTex(t) {
+    if (this.curTex !== t) { this.flush(); this.curTex = t; }
+  }
+
+  _push(x,y,u,v,r,g,b,a) {
+    const i = this.count * FPV;
+    this.buf[i]=x; this.buf[i+1]=y; this.buf[i+2]=u; this.buf[i+3]=v;
+    this.buf[i+4]=r; this.buf[i+5]=g; this.buf[i+6]=b; this.buf[i+7]=a;
+    this.count++;
+  }
+
+  _quad(x0,y0,x1,y1, u0,v0,u1,v1, r,g,b,a) {
+    this._push(x0,y0,u0,v0,r,g,b,a);
+    this._push(x1,y0,u1,v0,r,g,b,a);
+    this._push(x0,y1,u0,v1,r,g,b,a);
+    this._push(x1,y0,u1,v0,r,g,b,a);
+    this._push(x1,y1,u1,v1,r,g,b,a);
+    this._push(x0,y1,u0,v1,r,g,b,a);
+    if (this.count/6 >= MAX_QUADS-1) this.flush();
+  }
+
+  sprite(sx,sy,sw,sh, dx,dy,dw,dh, flipH=false,flipV=false, alpha=1) {
+    this._useTex(this.ssTex);
+    const W=this.ssW, H=this.ssH;
+    let u0=sx/W, u1=(sx+sw)/W, v0=sy/H, v1=(sy+sh)/H;
+    if (flipH){const t=u0;u0=u1;u1=t;}
+    if (flipV){const t=v0;v0=v1;v1=t;}
+    this._quad(dx,dy,dx+dw,dy+dh, u0,v0,u1,v1, 1,1,1,alpha);
+  }
+
+  spriteTex(texObj, dx,dy,dw,dh, alpha=1) {
+    this._useTex(texObj.tex);
+    this._quad(dx,dy,dx+dw,dy+dh, 0,0,1,1, 1,1,1,alpha);
+  }
+
+  rect(x,y,w,h, r,g,b,a=1) {
+    this._useTex(this.whiteTex);
+    this._quad(x,y,x+w,y+h, 0,0,0,0, r,g,b,a);
+  }
+
+  // Draw text using bitmap font (7×8 chars)
+  text(str, x, y, scale=3, spacing=1) {
+    if (!this.fontTex) return;
+    this._useTex(this.fontTex);
+    const cw=7, ch=8;
+    const charsPerRow = Math.floor(this.fontW / cw);
+    for (let i=0; i<str.length; i++) {
+      const code = str.charCodeAt(i);
+      const col = code % charsPerRow, row = Math.floor(code / charsPerRow);
+      const sx=col*cw, sy=row*ch;
+      const u0=sx/this.fontW, u1=(sx+cw)/this.fontW;
+      const v0=sy/this.fontH, v1=(sy+ch)/this.fontH;
+      const dx = x + (cw+spacing)*scale*i;
+      this._quad(dx,y,dx+cw*scale,y+ch*scale, u0,v0,u1,v1, 1,1,1,1);
+    }
+  }
+
+  textCentered(str, cx, cy, scale=3, spacing=1) {
+    const cw=7, ch=8;
+    const n=str.length;
+    const tw = cw*scale*n + spacing*scale*(n-1);
+    const th = ch*scale;
+    this.text(str, cx-tw/2, cy-th/2, scale, spacing);
+  }
+
+  textSize(str, scale=3, spacing=1) {
+    const n=str.length;
+    return { w: 7*scale*n + spacing*scale*(n-1), h: 8*scale };
+  }
+
+  flush() {
+    if (this.count === 0) return;
+    const gl = this.gl;
+    gl.useProgram(this.prog);
+    gl.uniform2f(this.uRes, this.canvas.width, this.canvas.height);
+    gl.uniform1i(this.uTex, 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.curTex);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.buf.subarray(0, this.count*FPV));
+    const stride = FPV*4;
+    gl.enableVertexAttribArray(this.aPos);
+    gl.vertexAttribPointer(this.aPos,2,gl.FLOAT,false,stride,0);
+    gl.enableVertexAttribArray(this.aUV);
+    gl.vertexAttribPointer(this.aUV,2,gl.FLOAT,false,stride,8);
+    gl.enableVertexAttribArray(this.aCol);
+    gl.vertexAttribPointer(this.aCol,4,gl.FLOAT,false,stride,16);
+    gl.drawArrays(gl.TRIANGLES, 0, this.count);
+    this.count = 0;
+  }
+
+  begin() {
+    const gl = this.gl;
+    gl.viewport(0,0,this.canvas.width,this.canvas.height);
+    gl.clearColor(0,0,0,1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+}
+
+// ── Level renderer ────────────────────────────────────────────────────────────
+function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesLeft) {
+  const {W,H,tiles,entities} = level;
+  const playerFrame = frac(gameTime) > 0.5 ? 1 : 0;
+
+  // Ice / water backgrounds
+  for (let j=0;j<H;j++) for (let i=0;i<W;i++) {
+    const t = tiles[j][i];
+    if (t===T_ICE)   r.sprite(...SP.iceBg,  xo+i*tsize, yo+j*tsize, tsize, tsize);
+    if (t===T_WATER) r.sprite(...SP.waterBg, xo+i*tsize, yo+j*tsize, tsize, tsize);
+  }
+
+  // Sunk entities
+  for (const e of entities) {
+    if (!e.sunk) continue;
+    const px = Math.round(xo + tsize*lerp(e.x-e.pdx, e.x, animT));
+    const py = Math.round(yo + tsize*lerp(e.y-e.pdy, e.y, animT));
+    const cl = ENTITY_CLIP[e.et] || SP.present;
+    r.sprite(cl[0],cl[1],16,16, px,py,tsize,tsize, false,false, 0.55);
+  }
+
+  // Entity reflections
+  for (const e of entities) {
+    if (e.sunk || e.et===ET_TARGET) continue;
+    const px = Math.round(xo + tsize*lerp(e.x-e.pdx, e.x, animT));
+    const py = Math.round(yo + tsize*lerp(e.y-e.pdy, e.y, animT));
+    const bh = ENTITY_BASE_H[e.et] || 0;
+    const reflY = py + tsize - 2*scale*bh;
+    let sx, sy;
+    if (e.et===ET_PLAYER) {
+      const cl = playerFrame ? SP.player1 : SP.player0;
+      sx=cl[0]; sy=cl[1];
+    } else {
+      const cl = ENTITY_CLIP[e.et];
+      sx=cl[0]; sy=cl[1];
+    }
+    const flipH = e.et===ET_PLAYER && !playerFacesLeft;
+    r.sprite(sx,sy,16,16, px,reflY,tsize,tsize, flipH, true, 0.25);
+  }
+
+  // Tiles
+  for (let j=0;j<H;j++) for (let i=0;i<W;i++) {
+    const cl = TILE_CLIP[tiles[j][i]];
+    if (cl) r.sprite(cl[0],cl[1],16,16, xo+i*tsize, yo+j*tsize, tsize,tsize);
+  }
+
+  // Targets first
+  for (const e of entities) {
+    if (e.et!==ET_TARGET) continue;
+    const px = Math.round(xo + tsize*lerp(e.x-e.pdx, e.x, animT));
+    const py = Math.round(yo + tsize*lerp(e.y-e.pdy, e.y, animT));
+    r.sprite(...SP.target, px, py, tsize, tsize);
+  }
+
+  // Other entities
+  for (const e of entities) {
+    if (e.sunk || e.et===ET_TARGET) continue;
+    const px = Math.round(xo + tsize*lerp(e.x-e.pdx, e.x, animT));
+    const py = Math.round(yo + tsize*lerp(e.y-e.pdy, e.y, animT));
+    let sx, sy;
+    if (e.et===ET_PLAYER) {
+      const cl = playerFrame ? SP.player1 : SP.player0;
+      sx=cl[0]; sy=cl[1];
+    } else {
+      const cl = ENTITY_CLIP[e.et];
+      sx=cl[0]; sy=cl[1];
+    }
+    const flipH = e.et===ET_PLAYER && !playerFacesLeft;
+    r.sprite(sx,sy,16,16, px,py,tsize,tsize, flipH,false, 1);
+  }
+}
+
+function drawBackground(r, tsize, xo, yo, screenW, screenH) {
+  const [sx,sy] = SP.wall;
+  const startX = (xo % tsize) - tsize;
+  const startY = (yo % tsize) - tsize;
+  for (let x=startX; x<screenW+tsize; x+=tsize)
+    for (let y=startY; y<screenH+tsize; y+=tsize)
+      r.sprite(sx,sy,16,16, x,y,tsize,tsize);
+}
+
+function calcScaleAndOffset(levelW, levelH, screenW, screenH, maxScale=8) {
+  let scale = 1;
+  while ((scale+1)*16*levelW < screenW && (scale+1)*16*levelH < screenH && scale < maxScale)
+    scale++;
+  const tsize = 16*scale;
+  let xo = Math.floor(screenW/2 - tsize*levelW/2);
+  let yo = Math.floor(screenH/2 - tsize*levelH/2);
+  xo = Math.floor(xo/tsize)*tsize;
+  yo = Math.floor(yo/tsize)*tsize;
+  return {scale, tsize, xo, yo};
+}
+
+// ── Snowflakes ────────────────────────────────────────────────────────────────
+function drawSnowflakes(r, t, xo, screenW, screenH) {
+  const s = Math.max(1, Math.floor(screenW/400));
+  const spacing = s*3;
+  const slowness=12, freq=10;
+  const sinMag = 10*screenW/2000, vxhMag = 100*screenW/2000;
+  const pot = sinMag+vxhMag;
+  const s0 = Math.floor(-pot/spacing)-1+Math.floor(xo/spacing);
+  const s1 = Math.floor((pot+screenW)/spacing)+1+Math.floor(xo/spacing);
+  for (let seed=s0; seed<s1; seed++) {
+    const phase = hashF(seed, 0, slowness);
+    const tp = (t+phase)/slowness;
+    const h = tp - Math.floor(tp);
+    const iter = Math.floor(tp);
+    const vxh = hashF(seed+9853*iter, -vxhMag, vxhMag);
+    const sp2 = hashF(seed+1209*iter, 0, 2*Math.PI);
+    const sx2 = seed*spacing;
+    const x = Math.round(sx2 + h*vxh + sinMag*Math.sin(h*freq+sp2) - xo);
+    const y = Math.round(h*(screenH+spacing) - spacing);
+    r.rect(x+s, y,   s, s, 1,1,1,1);
+    r.rect(x,   y+s, s, s, 1,1,1,1);
+    r.rect(x+s, y+2*s,s,s, 1,1,1,1);
+    r.rect(x+2*s,y+s, s, s, 1,1,1,1);
+  }
+}
+
+// ── Fireworks ─────────────────────────────────────────────────────────────────
+const FPS_DEAD=0, FPS_ASCENDING=1, FPS_TRAIL=2, FPS_SPARK=3, FPS_EXPLODED=4;
+const FW_COLORS=[[255,0,0],[0,255,0],[0,0,255],[0,255,255],[255,255,255],[255,0,255],[255,255,0]];
+
+class Fireworks {
+  constructor() { this.particles = []; this.seed = 42; }
+
+  reset() { this.particles = []; }
+
+  spawn() {
+    this.seed = hashI(this.seed, 0, 999999);
+    const color = FW_COLORS[hashI(this.seed+324234, 0, 7)];
+    const angle = hashF(this.seed+123321, Math.PI/4, 3*Math.PI/4);
+    const vmag = 0.4;
+    this.particles.push({
+      state:FPS_ASCENDING, age:0, life: 1.4*hashF(this.seed,0.6,1.4),
+      x:0.5, y:1, vx:vmag*Math.cos(angle), vy:-vmag*Math.sin(angle),
+      color, seed:this.seed, t1:0, t2:0, nch:0
+    });
+  }
+
+  _child(p, state) {
+    p.nch++;
+    const seed = hashI(p.seed+p.nch*34234, 0, 999999);
+    let life = 1;
+    if (state===FPS_ASCENDING) life=1.4*hashF(seed,0.6,1.4);
+    else if (state===FPS_TRAIL) life=1.2;
+    else if (state===FPS_SPARK) life=0.8;
+    else if (state===FPS_EXPLODED) life=hashF(seed,1,1.5);
+    return {state,age:0,life,x:p.x,y:p.y,vx:p.vx,vy:p.vy,
+            color:p.color,seed,t1:0,t2:0,nch:0};
+  }
+
+  update(dt) {
+    const next = [];
+    for (const p of this.particles) {
+      if (p.state===FPS_DEAD) continue;
+      p.age+=dt; p.t1+=dt; p.t2+=dt;
+      p.x+=p.vx*dt; p.y+=p.vy*dt;
+      if (p.state===FPS_ASCENDING) {
+        if (p.age>p.life) {
+          const n = hashI(p.seed,6,12);
+          for (let j=0;j<n;j++) {
+            const a=(2*Math.PI/n)*j;
+            const c = this._child(p, FPS_EXPLODED);
+            const vm = hashF(c.seed,0.08,0.2);
+            c.vx=vm*Math.cos(a); c.vy=vm*Math.sin(a);
+            next.push(c);
+          }
+          continue;
+        }
+        if (p.t1>0.03) { p.t1-=0.03; const c=this._child(p,FPS_TRAIL); c.vx*=0.1;c.vy*=0.1;c.vx+=hashF(c.seed+234,-0.01,0.01);c.vy+=hashF(c.seed+897,-0.01,0.01); next.push(c); }
+        if (p.t2>0.08) { p.t2-=0.08; const c=this._child(p,FPS_SPARK); c.vx*=0.05;c.vy*=0.05;c.vx+=hashF(c.seed+234,-0.05,0.05);c.vy+=hashF(c.seed+897,-0.05,0.05); next.push(c); }
+      } else if (p.state===FPS_EXPLODED) {
+        if (p.age>p.life) continue;
+        p.vy+=0.03*dt;
+        if (p.t1>0.04) { p.t1-=0.04; const c=this._child(p,FPS_TRAIL); c.vx*=0.1;c.vy*=0.1;c.vx+=hashF(c.seed+234,-0.05,0.05);c.vy+=hashF(c.seed+897,-0.05,0.05); next.push(c); }
+      } else {
+        if (p.age>p.life) continue;
+      }
+      next.push(p);
+    }
+    this.particles = next;
+  }
+
+  draw(r, screenW, screenH) {
+    const ps = 6;
+    for (const p of this.particles) {
+      const x=p.x*screenW, y=p.y*screenH;
+      const nt = p.age/p.life;
+      let [rr,gg,bb,aa] = [p.color[0]/255, p.color[1]/255, p.color[2]/255, 1];
+      if (p.state===FPS_TRAIL) {
+        aa = nt < 0.5 ? lerp(1,1,nt/0.5) : lerp(1,0,(nt-0.5)/0.5);
+      } else if (p.state===FPS_SPARK) {
+        rr=1; gg=lerp(1,0,nt); bb=0; aa=lerp(1,0,nt);
+      }
+      r.rect(x-ps/2, y-ps/2, ps, ps, rr,gg,bb,aa);
+    }
+  }
+}
+
+// ── Audio ─────────────────────────────────────────────────────────────────────
+let audioCtx = null;
+const sfxBuffers = {};
+const MUSIC_FILES = ['assets/Tune_4.ogg','assets/Tune_5.ogg','assets/Tune_6.ogg'];
+let musicIdx = 0;
+const musicEl = new Audio();
+musicEl.volume = 0.4;
+let audioUnlocked = false;
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  // Load sfx
+  const toLoad = [
+    ['step',   'assets/snow-footstep-01.wav', 0.56],
+    ['step2',  'assets/snow-footstep-02.wav', 0.56],
+    ['step3',  'assets/snow-footstep-03.wav', 0.56],
+    ['slip',   'assets/slide.wav',            0.70],
+    ['undo',   'assets/undo.ogg',             0.35],
+    ['lose',   'assets/lose.ogg',             0.21],
+    ['win',    'assets/win.ogg',              0.21],
+    ['movefinal','assets/movefinal.ogg',      0.21],
+    ['mmove',  'assets/menu-move.wav',        0.21],
+    ['msel',   'assets/double-pling-select.wav',0.21],
+  ];
+  for (const [name,path,vol] of toLoad) {
+    fetch(path).then(r=>r.arrayBuffer()).then(ab=>audioCtx.decodeAudioData(ab)).then(buf=>{
+      sfxBuffers[name]={buf,vol};
+    }).catch(()=>{});
+  }
+  musicEl.src = MUSIC_FILES[0];
+  musicEl.play().catch(()=>{});
+}
+
+musicEl.addEventListener('ended', () => {
+  musicIdx = (musicIdx+1) % MUSIC_FILES.length;
+  musicEl.src = MUSIC_FILES[musicIdx];
+  musicEl.play().catch(()=>{});
+});
+
+let _stepRot = 0;
+function playSound(name) {
+  if (!audioCtx) return;
+  let key = name;
+  if (name==='step') {
+    _stepRot = (_stepRot+1)%3;
+    key = _stepRot===0?'step':_stepRot===1?'step2':'step3';
+  }
+  const s = sfxBuffers[key];
+  if (!s) return;
+  const src = audioCtx.createBufferSource();
+  src.buffer = s.buf;
+  const gain = audioCtx.createGain();
+  gain.gain.value = s.vol;
+  src.connect(gain); gain.connect(audioCtx.destination);
+  src.start();
+}
+
+// ── Save / load ───────────────────────────────────────────────────────────────
+// completed[worldIdx][levelIdx] = bool
+const completed = WORLD_DATA.map(w => new Array(w.levels.length).fill(false));
+
+function saveProgress() {
+  try { localStorage.setItem('snowkoban', JSON.stringify(completed)); } catch(e){}
+}
+function loadProgress() {
+  try {
+    const d = JSON.parse(localStorage.getItem('snowkoban')||'null');
+    if (!d) return;
+    for (let wi=0;wi<Math.min(d.length,completed.length);wi++)
+      for (let li=0;li<Math.min(d[wi].length,completed[wi].length);li++)
+        completed[wi][li] = !!d[wi][li];
+  } catch(e){}
+}
+
+// ── App state ─────────────────────────────────────────────────────────────────
+let SCENE = 'menu'; // 'menu' | 'levelselect' | 'game'
+let TRANS = null;   // {from, to, t, dur}
+
+// Level select state
+let selWorld = 0, selLevel = 0;
+let menuScrollX = 0, menuScrollY = 0;
+let menuTargetX = 0, menuTargetY = 0;
+let timeSinceSelect = 1;
+
+// Game state
+let gLevel = null;       // parsed level
+let gEntities = [];
+let gTiles = [];
+let gW = 0, gH = 0;
+let gTitle = '';
+let gState = 'normal';   // 'normal'|'animate'|'celebrate'|'gloat'|'rewind'
+let gStateT = 0;
+let gPlayerFacesLeft = true;
+let gHistory = [];
+let gAnimT = 1;
+let gBufDx = 0, gBufDy = 0, gBufWhen = 0;
+const STEP_TIME = 0.1, BUFFER_WINDOW = 0.1;
+const CELEBRATE_T = 1.0;
+let gTitleState = 'none'; // 'none'|'in'|'show'|'out'
+let gTitleT = 0;
+let gVictories = 0;
+const fw = new Fireworks();
+let fwTimer = 0;
+let undosPerSec = 2;
+const UNDOS_INITIAL = 2;
+let gTime = 0;
+let absTime = 0;
+let snowXo = 0;
+
+// All parsed levels, flat array in same order as WORLD_DATA
+let allParsed = [];
+
+function flatLevelIndex(wi, li) {
+  let idx = 0;
+  for (let i=0;i<wi;i++) idx += WORLD_DATA[i].levels.length;
+  return idx + li;
+}
+
+function setScene(to) {
+  if (TRANS) { SCENE = TRANS.to; TRANS = null; }
+  TRANS = {from: SCENE, to, t:0, dur:0.4};
+}
+
+function startGame(wi, li) {
+  selWorld = wi; selLevel = li;
+  const parsed = allParsed[flatLevelIndex(wi, li)];
+  if (!parsed) return;
+  gLevel = parsed;
+  gW = parsed.W; gH = parsed.H;
+  gTiles = parsed.tiles;
+  gEntities = deepCopyEntities(parsed.entities);
+  gTitle = parsed.title;
+  gState = 'normal'; gStateT = 0;
+  gPlayerFacesLeft = true;
+  gHistory = [];
+  gAnimT = 1;
+  gBufDx = 0; gBufDy = 0;
+  gTitleState = 'in'; gTitleT = 0;
+  gVictories = 0;
+  fw.reset(); fwTimer = 0;
+}
+
+function moveAllPlayers(dx, dy) {
+  let moved = false;
+  gHistory.push(deepCopyEntities(gEntities));
+  if (gHistory.length > 512) gHistory.shift();
+  for (let i=0;i<gEntities.length;i++) {
+    if (gEntities[i].et===ET_PLAYER) {
+      if (moveEntity(gTiles, gEntities, gW, gH, i, dx, dy, playSound)) {
+        moved = true;
+      }
+    }
+  }
+  if (moved) {
+    if (dx>0) gPlayerFacesLeft=false;
+    if (dx<0) gPlayerFacesLeft=true;
+    levelStep(gTiles, gEntities);
+    gState = 'animate'; gStateT = 0;
+  } else {
+    gHistory.pop(); // nothing moved
+  }
+}
+
+function doUndo() {
+  if (!gHistory.length) return false;
+  gEntities = gHistory.pop();
+  playSound('undo');
+  return true;
+}
+
+function menuOffset(wi, li, worlds, screenW, screenH) {
+  const BTN=200, SPX=20, SPY=70;
+  const nX = Math.max(...WORLD_DATA.map(w=>w.levels.length));
+  const nY = WORLD_DATA.length;
+  const tx = screenW*0.05 + SPX - clamp(0, li-3, nX-5)*(SPX+BTN);
+  const ty = screenH*0.2 - BTN/2 - clamp(0, wi-1, nY-3)*(SPY+BTN);
+  return {tx, ty};
+}
+
+// ── Input ─────────────────────────────────────────────────────────────────────
+const keysDown = new Set();
+window.addEventListener('keydown', e => {
+  unlockAudio();
+  keysDown.add(e.code);
+  handleKey(e.code, e.repeat);
+});
+window.addEventListener('keyup', e => keysDown.delete(e.code));
+
+function handleKey(code, repeat) {
+  if (TRANS) return;
+
+  if (SCENE === 'menu') {
+    if (code==='Enter'||code==='Space'||code==='KeyZ') {
+      playSound('msel'); setScene('levelselect');
+    }
+    return;
+  }
+
+  if (SCENE === 'levelselect') {
+    const up   = code==='ArrowUp'||code==='KeyW'||code==='KeyK';
+    const down = code==='ArrowDown'||code==='KeyS'||code==='KeyJ';
+    const left = code==='ArrowLeft'||code==='KeyA'||code==='KeyH';
+    const right= code==='ArrowRight'||code==='KeyD'||code==='KeyL';
+    const sel  = code==='Enter'||code==='Space'||code==='KeyZ';
+    const esc  = code==='Escape';
+
+    if (esc) { playSound('mmove'); setScene('menu'); return; }
+    if (up && selWorld>0) { selWorld--; selLevel=Math.min(selLevel,WORLD_DATA[selWorld].levels.length-1); playSound('mmove'); timeSinceSelect=0; }
+    if (down && selWorld<WORLD_DATA.length-1) { selWorld++; selLevel=Math.min(selLevel,WORLD_DATA[selWorld].levels.length-1); playSound('mmove'); timeSinceSelect=0; }
+    if (left) {
+      if (selLevel>0) { selLevel--; playSound('mmove'); timeSinceSelect=0; }
+      else if (selWorld>0) { selWorld--; selLevel=WORLD_DATA[selWorld].levels.length-1; playSound('mmove'); timeSinceSelect=0; }
+    }
+    if (right) {
+      if (selLevel<WORLD_DATA[selWorld].levels.length-1) { selLevel++; playSound('mmove'); timeSinceSelect=0; }
+      else if (selWorld<WORLD_DATA.length-1) { selWorld++; selLevel=0; playSound('mmove'); timeSinceSelect=0; }
+    }
+    if (sel) { playSound('msel'); startGame(selWorld, selLevel); setScene('game'); }
+    return;
+  }
+
+  if (SCENE === 'game') {
+    if (code==='Escape') { setScene('levelselect'); return; }
+    if (gState==='celebrate') return;
+    if (gState==='gloat') {
+      setScene('levelselect'); return;
+    }
+    if (code==='KeyU' && !repeat) doUndo();
+
+    const up   = code==='ArrowUp'  ||code==='KeyW'||code==='KeyK';
+    const down = code==='ArrowDown'||code==='KeyS'||code==='KeyJ';
+    const left = code==='ArrowLeft'||code==='KeyA'||code==='KeyH';
+    const right= code==='ArrowRight'||code==='KeyD'||code==='KeyL';
+    const reset= code==='KeyR';
+
+    if (up||down||left||right) {
+      const dx = right?1:left?-1:0;
+      const dy = down?1:up?-1:0;
+      if (gState==='animate') {
+        if (!repeat) { gBufDx=dx; gBufDy=dy; gBufWhen=absTime; }
+      } else if (gState==='normal' || gState==='rewind') {
+        moveAllPlayers(dx, dy);
+      }
+    }
+    if (reset && !repeat) {
+      if (doUndo()) { gState='rewind'; gStateT=0; undosPerSec=UNDOS_INITIAL; playSound('lose'); }
+    }
+  }
+}
+window.addEventListener('keyup', e => {
+  if (e.code==='KeyR' && SCENE==='game' && gState==='rewind') gState='normal';
+});
+
+// ── Update ────────────────────────────────────────────────────────────────────
+function updateGame(dt) {
+  gStateT += dt;
+  gTitleT += dt;
+  fwTimer += dt;
+
+  // Title state machine
+  if (gTitleState==='in'  && gTitleT>1)  { gTitleState='show'; gTitleT=0; }
+  if (gTitleState==='show'&& gTitleT>2)  { gTitleState='out';  gTitleT=0; }
+  if (gTitleState==='out' && gTitleT>1)  { gTitleState='none'; gTitleT=0; }
+
+  if (gState==='celebrate'||gState==='gloat') {
+    if (fwTimer>0.3) { fw.spawn(); fwTimer=0; }
+    fw.update(dt);
+    if (gState==='celebrate' && gStateT>CELEBRATE_T) { gState='gloat'; gStateT=0; }
+    return;
+  }
+
+  if (gState==='animate') {
+    if (gStateT >= STEP_TIME) {
+      // Try ice
+      if (doIce(gTiles, gEntities, gW, gH, playSound)) {
+        levelStep(gTiles, gEntities);
+        gState='animate'; gStateT=0;
+      } else if (checkVictory(gEntities)) {
+        gState='celebrate'; gStateT=0;
+        gVictories++;
+        completed[selWorld][selLevel]=true;
+        saveProgress();
+        playSound('win');
+        fw.reset(); fwTimer=0;
+      } else if ((gBufDx||gBufDy) && (absTime-gBufWhen)<BUFFER_WINDOW) {
+        const dx=gBufDx, dy=gBufDy; gBufDx=0; gBufDy=0;
+        moveAllPlayers(dx, dy);
+      } else {
+        gState='normal'; gStateT=0;
+      }
+    }
+    gAnimT = clamp(gStateT/STEP_TIME, 0, 1);
+  }
+
+  if (gState==='rewind') {
+    if (gStateT > 1/undosPerSec) {
+      gStateT=0; undosPerSec++;
+      if (!doUndo()) gState='normal';
+    }
+  }
+
+  if (gState==='normal') gAnimT = 1;
+}
+
+// ── Draw scenes ───────────────────────────────────────────────────────────────
+function drawMenu(r, screenW, screenH) {
+  const ts = 16*8;
+  drawBackground(r, ts, 0, 0, screenW, screenH);
+  drawSnowflakes(r, absTime, snowXo, screenW, screenH);
+  // Title
+  const title='snowkoban';
+  r.textCentered(title, screenW/2, screenH/3-24, 6, 1);
+  // "press enter to play"
+  r.textCentered('press enter to play', screenW/2, screenH/2+20, 3, 1);
+}
+
+function drawLevelSelect(r, screenW, screenH) {
+  const BTN=200, SPX=20, SPY=70;
+  const ts = 16*8;
+  drawBackground(r, ts, 0, 0, screenW, screenH);
+  drawSnowflakes(r, absTime, snowXo - menuScrollX, screenW, screenH);
+
+  const ox = menuScrollX, oy = menuScrollY;
+  const LINE=6;
+
+  for (let wi=0; wi<WORLD_DATA.length; wi++) {
+    const world = WORLD_DATA[wi];
+    // World name
+    r.text(world.name.toLowerCase(), 5+screenW*0.05, oy+(SPY+BTN)*wi-32, 3, 1);
+
+    for (let li=0; li<world.levels.length; li++) {
+      const bx = ox+(SPX+BTN)*li, by = oy+(SPY+BTN)*wi;
+      const isSel = wi===selWorld && li===selLevel;
+      const isDone = completed[wi][li];
+      let dilate = 0;
+      if (isSel) dilate = slowStop(clamp(timeSinceSelect/0.25,0,1))*20;
+
+      const bxd=bx-dilate, byd=by-dilate, bwd=BTN+dilate*2, bhd=BTN+dilate*2;
+      // Border
+      const bc = isSel ? [1,0.42,0.42] : isDone ? [0.84,1,0.67] : [0.07,0.12,0.2];
+      r.rect(bxd-LINE, byd-LINE, bwd+LINE*2, bhd+LINE*2, bc[0],bc[1],bc[2]);
+      // Preview
+      const fi = flatLevelIndex(wi, li);
+      if (r.previews[fi]) {
+        r.spriteTex(r.previews[fi], bxd, byd, bwd, bhd);
+      } else {
+        r.rect(bxd, byd, bwd, bhd, 0.1,0.1,0.2);
+      }
+      // Vignette for incomplete
+      if (!isDone) r.rect(bxd,byd,bwd,bhd, 0,0,0,0.5);
+    }
+  }
+}
+
+function drawGameScene(r, screenW, screenH) {
+  const {scale, tsize, xo, yo} = calcScaleAndOffset(gW, gH, screenW, screenH);
+  drawBackground(r, tsize, xo, yo, screenW, screenH);
+  drawLevel(r, {W:gW,H:gH,tiles:gTiles,entities:gEntities}, xo, yo, tsize, scale,
+            gState==='animate' ? gAnimT : 1, gTime, gPlayerFacesLeft);
+  drawSnowflakes(r, absTime, snowXo, screenW, screenH);
+
+  // Rewind flash
+  if (gState==='rewind') {
+    const flash = 0.3*Math.abs(Math.sin(absTime*20));
+    r.rect(0,0,screenW,screenH, 0.5,0.5,1,flash);
+  }
+
+  // Level title
+  const scale2 = 6, sp = 1;
+  if (gTitleState==='in') {
+    const down = slowStop(clamp(gTitleT,0,1));
+    const y = down*100-50;
+    r.textCentered(gTitle.toLowerCase(), screenW/2, y, scale2, sp);
+  } else if (gTitleState==='show') {
+    r.textCentered(gTitle.toLowerCase(), screenW/2, 50, scale2, sp);
+  } else if (gTitleState==='out') {
+    const up = slowStart(clamp(gTitleT,0,1));
+    const y = (1-up)*100-50;
+    r.textCentered(gTitle.toLowerCase(), screenW/2, y, scale2, sp);
+  }
+
+  // Victory
+  if (gState==='celebrate'||gState==='gloat') {
+    fw.draw(r, screenW, screenH);
+    const nt = gState==='gloat' ? 1 : slowStop(clamp(gStateT/CELEBRATE_T,0,1));
+    const ts2 = r.textSize('winner', scale2, sp);
+    const wx = screenW/2, wy = screenH/2;
+    // Draw "winner" scaled + rotated — fake it with scale
+    const wscale = Math.round(nt*scale2*2);
+    if (wscale>0) r.textCentered('winner', wx, wy, wscale, sp);
+  }
+}
+
+// ── Render to texture for transitions ────────────────────────────────────────
+// Simple: draw both scenes and slide them
+function drawTransition(r, screenW, screenH, from, to, t) {
+  // Just draw the destination scene (cheaper, still looks OK for a tile game)
+  // Cross-fade overlay
+  const eased = slowStartStop3(t);
+  // Draw 'from' scene shifted right, 'to' scene coming from left
+  drawSceneByName(r, screenW, screenH, to); // draw destination
+}
+
+function drawSceneByName(r, screenW, screenH, name) {
+  if (name==='menu')        drawMenu(r, screenW, screenH);
+  else if (name==='levelselect') drawLevelSelect(r, screenW, screenH);
+  else if (name==='game')   drawGameScene(r, screenW, screenH);
+}
+
+// ── Main loop ─────────────────────────────────────────────────────────────────
+async function main() {
+  loadProgress();
+
+  const canvas = document.getElementById('c');
+  let W = window.innerWidth, H = window.innerHeight;
+  canvas.width = W; canvas.height = H;
+
+  const r = new Renderer(canvas);
+
+  // Load images
+  const loadImg = src => new Promise((res,rej) => {
+    const img=new Image(); img.onload=()=>res(img); img.onerror=rej; img.src=src;
+  });
+
+  const [ssImg, fontImg] = await Promise.all([
+    loadImg('assets/snowkoban.png'),
+    loadImg('assets/custombold.png'),
+  ]);
+
+  window._ssImg = ssImg; // needed for preview generation
+
+  r.loadSpritesheet(ssImg);
+  r.loadFont(fontImg);
+
+  // Parse all levels
+  allParsed = [];
+  for (let wi=0;wi<WORLD_DATA.length;wi++)
+    for (let li=0;li<WORLD_DATA[wi].levels.length;li++)
+      allParsed.push({parsed: parseLevel(WORLD_DATA[wi].levels[li]), wi, li});
+
+  // Build level previews
+  r.buildPreviews(allParsed);
+
+  let last = 0;
+  function loop(ts) {
+    const dt = Math.min((ts-last)/1000, 0.05);
+    last = ts;
+    gTime += dt;
+    absTime += dt;
+    timeSinceSelect += dt;
+
+    // Resize
+    if (window.innerWidth!==W||window.innerHeight!==H) {
+      W=window.innerWidth; H=window.innerHeight;
+      canvas.width=W; canvas.height=H;
+    }
+
+    // Scroll snow
+    snowXo += dt*30;
+
+    // Update transitions
+    if (TRANS) {
+      TRANS.t += dt;
+      if (TRANS.t >= TRANS.dur) { SCENE=TRANS.to; TRANS=null; }
+    }
+
+    // Update current scene
+    if (!TRANS || TRANS.to===SCENE) {
+      if (SCENE==='game') updateGame(dt);
+    }
+
+    // Level menu scroll
+    if (SCENE==='levelselect'||TRANS?.to==='levelselect') {
+      const {tx,ty} = menuOffset(selWorld, selLevel, WORLD_DATA, W, H);
+      menuTargetX=tx; menuTargetY=ty;
+    }
+    menuScrollX += (menuTargetX-menuScrollX)*dt*8;
+    menuScrollY += (menuTargetY-menuScrollY)*dt*8;
+
+    // Draw
+    r.begin();
+    if (TRANS) {
+      drawTransition(r, W, H, TRANS.from, TRANS.to, TRANS.t/TRANS.dur);
+    } else {
+      drawSceneByName(r, W, H, SCENE);
+    }
+    r.flush();
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(ts => { last=ts; requestAnimationFrame(loop); });
+}
+
+main().catch(console.error);
+</script>
+</body>
+</html>

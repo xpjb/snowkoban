@@ -1,0 +1,22 @@
+3index.html:862 Uncaught TypeError: Cannot read properties of undefined (reading 'map')
+    at deepCopyEntities (index.html:862:19)
+    at startGame (index.html:1456:15)
+    at handleKey (index.html:1543:35)
+    at index.html:1510:3
+
+
+theres a few purple missing assets on home screen
+each text instance seems to have some purple assets with it
+
+
+and also like
+
+
+start and options on main screen, buttons needed. options to have volume and whatnot
+
+----
+snowkoban ideas for main screen yea
+journey mode also
+diagetic main menu
+instructions on the ground, arrows to move
+friendly elves to talk to where they open the settings modal or whatever
