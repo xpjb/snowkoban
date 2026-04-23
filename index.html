@@ -1200,7 +1200,8 @@ function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesL
     const px = Math.round(xo + tsize*lerp(e.x-e.pdx, e.x, animT));
     const py = Math.round(yo + tsize*lerp(e.y-e.pdy, e.y, animT));
     const bh = ENTITY_BASE_H[e.et] || 0;
-    const reflY = py + tsize - 2*scale*bh;
+    const reflY = py + tsize - 2*scale*bh + 1;
+    const reflH = Math.max(1, tsize - 1);
     let sx, sy;
     if (e.et===ET_PLAYER) {
       const cl = playerFrame ? SP.player1 : SP.player0;
@@ -1210,8 +1211,8 @@ function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesL
       sx=cl[0]; sy=cl[1];
     }
     const flipH = e.et===ET_PLAYER && !playerFacesLeft;
-    // Reference draws reflections at full opacity; water/ice layering attenuates naturally.
-    r.sprite(sx,sy,16,16, px,reflY,tsize,tsize, flipH, true, 1.0);
+    // 1px inset margin avoids occasional boundary bleed into next tile.
+    r.sprite(sx,sy,16,16, px,reflY,tsize,reflH, flipH, true, 1.0);
   }
 
   // Tiles
@@ -1269,7 +1270,7 @@ function calcScaleAndOffset(levelW, levelH, screenW, screenH, maxScale=8) {
 
 // ── Snowflakes ────────────────────────────────────────────────────────────────
 function drawSnowflakes(r, t, xo, screenW, screenH) {
-  const s = Math.max(1, Math.floor(screenW/400));
+  const s = Math.max(2, Math.floor(screenW/320));
   const spacing = s*3;
   const slowness=12, freq=10;
   const sinMag = 10*screenW/2000, vxhMag = 100*screenW/2000;
@@ -1399,8 +1400,8 @@ function unlockAudio() {
   audioCtx = new (window.AudioContext||window.webkitAudioContext)();
   // Load sfx
   const toLoad = [
-    ['step',   'assets/snow-footstep-01.wav', 0.80],
-    ['slip',   'assets/slide.wav',            1.00],
+    ['step',   'assets/snow-footstep-01.wav', 0.45],
+    ['slip',   'assets/slide.wav',            0.60],
     ['undo',   'assets/undo.ogg',             0.50],
     ['lose',   'assets/lose.ogg',             0.30],
     ['win',    'assets/win.ogg',              0.30],
@@ -1513,6 +1514,7 @@ const UNDOS_INITIAL = 2;
 let rewindHoldKey = null;
 let rewindHoldRepeats = 0;
 let gTime = 0;
+let gInterpTime = 0;
 let absTime = 0;
 let snowXo = 0;
 
@@ -1552,9 +1554,16 @@ function startGame(wi, li) {
   return true;
 }
 
+function nextLevelPos(wi, li) {
+  if (wi < 0 || wi >= WORLD_DATA.length) return null;
+  if (li + 1 < WORLD_DATA[wi].levels.length) return {wi, li: li + 1};
+  if (wi + 1 < WORLD_DATA.length) return {wi: wi + 1, li: 0};
+  return null;
+}
+
 function moveAllPlayers(dx, dy) {
   let moved = false;
-  gHistory.push(deepCopyEntities(gEntities));
+  gHistory.push({entities: deepCopyEntities(gEntities), time: gTime});
   if (gHistory.length > 512) gHistory.shift();
   for (let i=0;i<gEntities.length;i++) {
     if (gEntities[i].et===ET_PLAYER) {
@@ -1575,7 +1584,14 @@ function moveAllPlayers(dx, dy) {
 
 function doUndo() {
   if (!gHistory.length) return false;
-  gEntities = gHistory.pop();
+  const rec = gHistory.pop();
+  if (Array.isArray(rec)) {
+    // Legacy history format fallback.
+    gEntities = rec;
+  } else {
+    gEntities = rec.entities;
+    if (typeof rec.time === 'number') gTime = rec.time;
+  }
   playSound('undo');
   return true;
 }
@@ -1602,7 +1618,7 @@ function handleUndoRewindKey(code, repeat) {
 }
 
 function menuOffset(wi, li, worlds, screenW, screenH) {
-  const BTN=200, SPX=20, SPY=70;
+  const BTN=200, SPX=20, SPY=110;
   const nX = Math.max(...WORLD_DATA.map(w=>w.levels.length));
   const nY = WORLD_DATA.length;
   const tx = screenW*0.05 + SPX - clamp(0, li-3, nX-5)*(SPX+BTN);
@@ -1627,8 +1643,8 @@ function handleKey(code, repeat) {
     const down = code==='ArrowDown'||code==='KeyS'||code==='KeyJ';
     const sel = code==='Enter'||code==='Space'||code==='KeyZ';
     const menuItems = ['start', 'options'];
-    if (up && menuSelection > 0) { menuSelection--; playSound('mmove'); }
-    if (down && menuSelection < menuItems.length-1) { menuSelection++; playSound('mmove'); }
+    if (up) { menuSelection = (menuSelection - 1 + menuItems.length) % menuItems.length; playSound('mmove'); }
+    if (down) { menuSelection = (menuSelection + 1) % menuItems.length; playSound('mmove'); }
     if (sel) {
       playSound('msel');
       if (menuSelection === 0) setScene('levelselect');
@@ -1702,7 +1718,15 @@ function handleKey(code, repeat) {
     if (code==='Escape') { setScene('levelselect'); return; }
     if (gState==='celebrate') return;
     if (gState==='gloat') {
-      setScene('levelselect'); return;
+      if (!repeat) {
+        const n = nextLevelPos(selWorld, selLevel);
+        if (n && startGame(n.wi, n.li)) {
+          playSound('msel');
+        } else {
+          setScene('levelselect');
+        }
+      }
+      return;
     }
     const undoRewind = code==='KeyZ' || code==='KeyR' || code==='KeyU';
     if (undoRewind) {
@@ -1790,7 +1814,7 @@ function updateGame(dt) {
 function drawMenu(r, screenW, screenH) {
   const ts = 16*8;
   drawBackground(r, ts, 0, 0, screenW, screenH);
-  drawSnowflakes(r, absTime, snowXo, screenW, screenH);
+  drawSnowflakes(r, gInterpTime, snowXo, screenW, screenH);
   r.rect(0,0,screenW,screenH, 0,0,0,0.22);
   r.textCentered('snowkoban', screenW/2, screenH/4, 6, 1);
 
@@ -1810,12 +1834,15 @@ function drawMenu(r, screenW, screenH) {
     r.rect(paneX, y, btnW, btnH, fill[0], fill[1], fill[2], fill[3]);
     r.textCentered(labels[i], screenW/2, y+btnH/2, 4, 1);
   }
+
+  r.textCentered('wasd to move, z to undo', screenW/2, screenH-72, 3, 1);
+  r.textCentered('music by j>k', screenW/2, screenH-38, 3, 1);
 }
 
 function drawOptions(r, screenW, screenH) {
   const ts = 16*8;
   drawBackground(r, ts, 0, 0, screenW, screenH);
-  drawSnowflakes(r, absTime, snowXo, screenW, screenH);
+  drawSnowflakes(r, gInterpTime, snowXo, screenW, screenH);
   r.rect(0,0,screenW,screenH, 0,0,0,0.28);
 
   r.textCentered('options', screenW/2, screenH/5, 5, 1);
@@ -1847,10 +1874,10 @@ function drawOptions(r, screenW, screenH) {
 }
 
 function drawLevelSelect(r, screenW, screenH) {
-  const BTN=200, SPX=20, SPY=70;
+  const BTN=200, SPX=20, SPY=110;
   const ts = 16*8;
   drawBackground(r, ts, 0, 0, screenW, screenH);
-  drawSnowflakes(r, absTime, snowXo - menuScrollX, screenW, screenH);
+  drawSnowflakes(r, gInterpTime, snowXo - menuScrollX, screenW, screenH);
   r.rect(0,0,screenW,screenH, 0,0,0,0.16);
 
   const ox = menuScrollX, oy = menuScrollY;
@@ -1859,9 +1886,6 @@ function drawLevelSelect(r, screenW, screenH) {
   // Draw all non-selected previews first.
   for (let wi=0; wi<WORLD_DATA.length; wi++) {
     const world = WORLD_DATA[wi];
-    // World name
-    r.text(world.name.toLowerCase(), 5+screenW*0.05, oy+(SPY+BTN)*wi-32, 3, 1);
-
     for (let li=0; li<world.levels.length; li++) {
       if (wi===selWorld && li===selLevel) continue;
       const bx = ox+(SPX+BTN)*li, by = oy+(SPY+BTN)*wi;
@@ -1896,6 +1920,12 @@ function drawLevelSelect(r, screenW, screenH) {
     r.rect(bxd, byd, bwd, bhd, 0.1,0.1,0.2);
   }
   if (!isDone) r.rect(bxd,byd,bwd,bhd, 0,0,0,0.5);
+
+  // Reference draws world titles after levels so text stays above expanded selection.
+  for (let wi2=0; wi2<WORLD_DATA.length; wi2++) {
+    const world = WORLD_DATA[wi2];
+    r.text(world.name.toLowerCase(), 5+screenW*0.05, oy+(SPY+BTN)*wi2-48, 3, 1);
+  }
 }
 
 function drawRewindEffect(r, screenW, screenH, t) {
@@ -1923,11 +1953,11 @@ function drawGameScene(r, screenW, screenH) {
   drawBackground(r, tsize, xo, yo, screenW, screenH);
   drawLevel(r, {W:gW,H:gH,tiles:gTiles,entities:gEntities}, xo, yo, tsize, scale,
             gState==='animate' ? gAnimT : 1, gTime, gPlayerFacesLeft);
-  drawSnowflakes(r, absTime, snowXo, screenW, screenH);
+  drawSnowflakes(r, gInterpTime, snowXo, screenW, screenH);
 
   // Rewind effect (reference style: bars + overlay + icon blink)
   if (gState==='rewind') {
-    drawRewindEffect(r, screenW, screenH, absTime);
+    drawRewindEffect(r, screenW, screenH, gInterpTime);
   }
 
   // Level title
@@ -2018,6 +2048,9 @@ async function main() {
     last = ts;
     gTime += dt;
     absTime += dt;
+    gInterpTime += dt;
+    // Match reference smoothing exactly.
+    gInterpTime += Math.min(2*dt, 0.1*(gTime - gInterpTime));
     timeSinceSelect += dt;
 
     // Resize

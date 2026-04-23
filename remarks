@@ -33,12 +33,11 @@ starting window size and resizing changes the level of zoom permanently
 selected level draw in front?
 
 ---------------
-player flow: automatic start next level
-the snow sound - no didnt the game use one of the beep sounds. check what the reference did
-pretty sure the undo sound is wrong too. Theres like this cursed sound and it triggers every time you press. the normal pop sound is there though. just check what the reference did.
-undo - allow z to also undo the same way as r does, count z as r basically. oh fuk it has u. okay well just use the sound u was causing. u z and r can all be the same thing but it should go into z/r mode if held too.
+player flow: automatic start next level after winning and pressing a key on winner screen
+the snow sound: make it fairly quieter
+the ice sound: make it a bit quieter
 wrap the menu selection on the main sc
-maybe the snow is a bit smaller
+maybe the snow could be a bit bigger
 
 --------
 --------------
