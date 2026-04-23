@@ -716,6 +716,7 @@ const SP = {
   hole:     [112,0,16,16],
   waterBg:  [128,0,16,16],
   water:    [128,16,16,16],
+  rewind:   [0,16,16,16],
 };
 
 const TILE_CLIP = {
@@ -743,6 +744,7 @@ function hashF(seed, lo, hi) { return lo + (hash(seed) / 0xFFFFFFFF) * (hi - lo)
 function hashI(seed, lo, hi) { return lo + (hash(seed) % (hi - lo)); }
 
 function slowStop(t)  { const s = t*(2-t); return s*(2-s); }
+function slowStop2(t) { return t*(2-t); }
 function slowStart(t) { const s = t*t;     return s*s; }
 function lerp(a,b,t)  { return a + (b-a)*t; }
 function clamp(x,a,b) { return x<a?a:x>b?b:x; }
@@ -876,7 +878,7 @@ void main(){
   v_uv=a_uv; v_col=a_col;
 }`;
 const FS = `
-precision mediump float;
+precision highp float;
 uniform sampler2D u_tex;
 varying vec2 v_uv;
 varying vec4 v_col;
@@ -956,17 +958,22 @@ class Renderer {
   }
 
   loadFont(img) {
-    // Replace magenta-ish key color with transparent to avoid purple fringe.
+    // Magenta colorkey with small tolerance for PNG conversion artifacts.
     const c = document.createElement('canvas');
     c.width = img.width; c.height = img.height;
     const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img,0,0);
     const id = ctx.getImageData(0,0,img.width,img.height);
     for (let i=0;i<id.data.length;i+=4) {
       const r = id.data[i], g = id.data[i+1], b = id.data[i+2];
-      if (r > 220 && g < 90 && b > 220) id.data[i+3] = 0;
+      const dr = Math.abs(r-255), dg = Math.abs(g-0), db = Math.abs(b-255);
+      if (dr<=8 && dg<=8 && db<=8) {
+        id.data[i] = 0; id.data[i+1] = 0; id.data[i+2] = 0; id.data[i+3] = 0;
+      }
     }
     ctx.putImageData(id,0,0);
+    this.fontSource = c;
     this.fontTex = this._upload(c);
     this.fontW = img.width; this.fontH = img.height;
   }
@@ -1046,6 +1053,7 @@ class Renderer {
   }
 
   sprite(sx,sy,sw,sh, dx,dy,dw,dh, flipH=false,flipV=false, alpha=1) {
+    dx = Math.round(dx); dy = Math.round(dy); dw = Math.round(dw); dh = Math.round(dh);
     this._useTex(this.ssTex);
     const W=this.ssW, H=this.ssH;
     let u0=sx/W, u1=(sx+sw)/W, v0=sy/H, v1=(sy+sh)/H;
@@ -1055,17 +1063,20 @@ class Renderer {
   }
 
   spriteTex(texObj, dx,dy,dw,dh, alpha=1) {
+    dx = Math.round(dx); dy = Math.round(dy); dw = Math.round(dw); dh = Math.round(dh);
     this._useTex(texObj.tex);
     this._quad(dx,dy,dx+dw,dy+dh, 0,0,1,1, 1,1,1,alpha);
   }
 
   rect(x,y,w,h, r,g,b,a=1) {
+    x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
     this._useTex(this.whiteTex);
     this._quad(x,y,x+w,y+h, 0,0,0,0, r,g,b,a);
   }
 
   // Draw text using bitmap font (7×8 chars)
   text(str, x, y, scale=3, spacing=1) {
+    x = Math.round(x); y = Math.round(y);
     if (!this.fontTex) return;
     this._useTex(this.fontTex);
     const cw=7, ch=8;
@@ -1079,6 +1090,45 @@ class Renderer {
       const dx = x + (cw+spacing)*scale*i;
       this._quad(dx,y,dx+cw*scale,y+ch*scale, u0,v0,u1,v1, 1,1,1,1);
     }
+  }
+
+  _quad4(x0,y0, x1,y1, x2,y2, x3,y3, u0,v0,u1,v1, r,g,b,a) {
+    this._push(x0,y0,u0,v0,r,g,b,a);
+    this._push(x1,y1,u1,v0,r,g,b,a);
+    this._push(x2,y2,u0,v1,r,g,b,a);
+    this._push(x1,y1,u1,v0,r,g,b,a);
+    this._push(x3,y3,u1,v1,r,g,b,a);
+    this._push(x2,y2,u0,v1,r,g,b,a);
+    if (this.count/6 >= MAX_QUADS-1) this.flush();
+  }
+
+  spriteTexRot(texObj, cx, cy, dw, dh, angleDeg=0, alpha=1) {
+    const w = dw*0.5, h = dh*0.5;
+    const a = angleDeg*Math.PI/180;
+    const cs = Math.cos(a), sn = Math.sin(a);
+    const rot = (x,y) => ({x: cx + x*cs - y*sn, y: cy + x*sn + y*cs});
+    const p0 = rot(-w,-h), p1 = rot(w,-h), p2 = rot(-w,h), p3 = rot(w,h);
+    this._useTex(texObj.tex);
+    this._quad4(p0.x,p0.y,p1.x,p1.y,p2.x,p2.y,p3.x,p3.y, 0,0,1,1, 1,1,1,alpha);
+  }
+
+  buildTextTexture(str, scale=3, spacing=1) {
+    if (!this.fontSource) return null;
+    const cw=7, ch=8;
+    const {w,h} = this.textSize(str, scale, spacing);
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    const charsPerRow = Math.floor(this.fontW / cw);
+    for (let i=0; i<str.length; i++) {
+      const code = str.charCodeAt(i);
+      const col = code % charsPerRow, row = Math.floor(code / charsPerRow);
+      const sx=col*cw, sy=row*ch;
+      const dx = (cw+spacing)*scale*i;
+      ctx.drawImage(this.fontSource, sx,sy,cw,ch, dx,0,cw*scale,ch*scale);
+    }
+    return {tex: this._upload(c), w, h};
   }
 
   textCentered(str, cx, cy, scale=3, spacing=1) {
@@ -1160,7 +1210,8 @@ function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesL
       sx=cl[0]; sy=cl[1];
     }
     const flipH = e.et===ET_PLAYER && !playerFacesLeft;
-    r.sprite(sx,sy,16,16, px,reflY,tsize,tsize, flipH, true, 0.25);
+    // Reference draws reflections at full opacity; water/ice layering attenuates naturally.
+    r.sprite(sx,sy,16,16, px,reflY,tsize,tsize, flipH, true, 1.0);
   }
 
   // Tiles
@@ -1330,7 +1381,7 @@ const MUSIC_FILES = ['assets/Tune_4.ogg','assets/Tune_5.ogg','assets/Tune_6.ogg'
 let musicIdx = 0;
 const musicEl = new Audio();
 let musicVolume = 0.4;
-let sfxVolume = 1.0;
+let sfxVolume = 0.7;
 musicEl.volume = musicVolume;
 let audioUnlocked = false;
 
@@ -1348,16 +1399,14 @@ function unlockAudio() {
   audioCtx = new (window.AudioContext||window.webkitAudioContext)();
   // Load sfx
   const toLoad = [
-    ['step',   'assets/snow-footstep-01.wav', 0.56],
-    ['step2',  'assets/snow-footstep-02.wav', 0.56],
-    ['step3',  'assets/snow-footstep-03.wav', 0.56],
-    ['slip',   'assets/slide.wav',            0.70],
-    ['undo',   'assets/undo.ogg',             0.35],
-    ['lose',   'assets/lose.ogg',             0.21],
-    ['win',    'assets/win.ogg',              0.21],
-    ['movefinal','assets/movefinal.ogg',      0.21],
-    ['mmove',  'assets/menu-move.wav',        0.21],
-    ['msel',   'assets/double-pling-select.wav',0.21],
+    ['step',   'assets/snow-footstep-01.wav', 0.80],
+    ['slip',   'assets/slide.wav',            1.00],
+    ['undo',   'assets/undo.ogg',             0.50],
+    ['lose',   'assets/lose.ogg',             0.30],
+    ['win',    'assets/win.ogg',              0.30],
+    ['movefinal','assets/movefinal.ogg',      0.30],
+    ['mmove',  'assets/menu-move.wav',        0.30],
+    ['msel',   'assets/double-pling-select.wav',0.30],
   ];
   for (const [name,path,vol] of toLoad) {
     fetch(path).then(r=>r.arrayBuffer()).then(ab=>audioCtx.decodeAudioData(ab)).then(buf=>{
@@ -1374,15 +1423,9 @@ musicEl.addEventListener('ended', () => {
   musicEl.play().catch(()=>{});
 });
 
-let _stepRot = 0;
 function playSound(name) {
   if (!audioCtx) return;
-  let key = name;
-  if (name==='step') {
-    _stepRot = (_stepRot+1)%3;
-    key = _stepRot===0?'step':_stepRot===1?'step2':'step3';
-  }
-  const s = sfxBuffers[key];
+  const s = sfxBuffers[name];
   if (!s) return;
   const src = audioCtx.createBufferSource();
   src.buffer = s.buf;
@@ -1395,12 +1438,13 @@ function playSound(name) {
 // ── Save / load ───────────────────────────────────────────────────────────────
 // completed[worldIdx][levelIdx] = bool
 const completed = WORLD_DATA.map(w => new Array(w.levels.length).fill(false));
+let maxScale = 8;
 
 function saveProgress() {
   try {
     localStorage.setItem('snowkoban', JSON.stringify({
       completed,
-      settings: {musicVolume, sfxVolume},
+      settings: {musicVolume, sfxVolume, maxScale},
     }));
   } catch(e){}
 }
@@ -1423,15 +1467,21 @@ function loadProgress() {
     if (d.settings) {
       if (typeof d.settings.musicVolume === 'number') setMusicVolume(d.settings.musicVolume);
       if (typeof d.settings.sfxVolume === 'number') setSfxVolume(d.settings.sfxVolume);
+      if (typeof d.settings.maxScale === 'number') maxScale = Math.max(1, Math.min(20, d.settings.maxScale|0));
     }
   } catch(e){}
 }
+window.addEventListener('beforeunload', saveProgress);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveProgress();
+});
 
 // ── App state ─────────────────────────────────────────────────────────────────
 let SCENE = 'menu'; // 'menu' | 'options' | 'levelselect' | 'game'
 let TRANS = null;   // {from, to, t, dur}
 let menuSelection = 0;
 let optionsSelection = 0;
+const sessionSeed = (Date.now() >>> 0);
 
 // Level select state
 let selWorld = 0, selLevel = 0;
@@ -1460,12 +1510,15 @@ const fw = new Fireworks();
 let fwTimer = 0;
 let undosPerSec = 2;
 const UNDOS_INITIAL = 2;
+let rewindHoldKey = null;
+let rewindHoldRepeats = 0;
 let gTime = 0;
 let absTime = 0;
 let snowXo = 0;
 
 // All parsed levels, flat array in same order as WORLD_DATA
 let allParsed = [];
+let winnerTex = null;
 
 function flatLevelIndex(wi, li) {
   let idx = 0;
@@ -1527,6 +1580,27 @@ function doUndo() {
   return true;
 }
 
+function handleUndoRewindKey(code, repeat) {
+  // Tap: one undo (legacy U behavior). Hold: becomes rewind (legacy R behavior).
+  if (!repeat || rewindHoldKey !== code) {
+    rewindHoldKey = code;
+    rewindHoldRepeats = 0;
+    doUndo();
+    return;
+  }
+  if (gState === 'rewind') return;
+  rewindHoldRepeats++;
+  if (rewindHoldRepeats >= 2) {
+    if (gHistory.length) {
+      gState = 'rewind';
+      gStateT = 0;
+      undosPerSec = UNDOS_INITIAL;
+    }
+  } else {
+    doUndo();
+  }
+}
+
 function menuOffset(wi, li, worlds, screenW, screenH) {
   const BTN=200, SPX=20, SPY=70;
   const nX = Math.max(...WORLD_DATA.map(w=>w.levels.length));
@@ -1570,21 +1644,26 @@ function handleKey(code, repeat) {
     const right = code==='ArrowRight'||code==='KeyD'||code==='KeyL';
     const sel = code==='Enter'||code==='Space'||code==='KeyZ';
     const esc = code==='Escape';
-    const maxOpt = 2;
+    const maxOpt = 3;
     if (esc) { playSound('mmove'); setScene('menu'); return; }
     if (up && optionsSelection > 0) { optionsSelection--; playSound('mmove'); }
     if (down && optionsSelection < maxOpt) { optionsSelection++; playSound('mmove'); }
     if ((left || right || sel) && optionsSelection === 0) {
-      const delta = left ? -0.04 : 0.04;
-      setMusicVolume(musicVolume + delta);
+      const delta = left ? -1 : 1;
+      maxScale = Math.max(1, Math.min(20, maxScale + delta));
       saveProgress();
       playSound('msel');
     } else if ((left || right || sel) && optionsSelection === 1) {
       const delta = left ? -0.04 : 0.04;
+      setMusicVolume(musicVolume + delta);
+      saveProgress();
+      playSound('msel');
+    } else if ((left || right || sel) && optionsSelection === 2) {
+      const delta = left ? -0.04 : 0.04;
       setSfxVolume(sfxVolume + delta);
       saveProgress();
       playSound('msel');
-    } else if (sel && optionsSelection === 2) {
+    } else if (sel && optionsSelection === 3) {
       playSound('msel');
       setScene('menu');
     }
@@ -1625,14 +1704,16 @@ function handleKey(code, repeat) {
     if (gState==='gloat') {
       setScene('levelselect'); return;
     }
-    if (code==='KeyU' && !repeat) doUndo();
+    const undoRewind = code==='KeyZ' || code==='KeyR' || code==='KeyU';
+    if (undoRewind) {
+      handleUndoRewindKey(code, repeat);
+      return;
+    }
 
     const up   = code==='ArrowUp'  ||code==='KeyW'||code==='KeyK';
     const down = code==='ArrowDown'||code==='KeyS'||code==='KeyJ';
     const left = code==='ArrowLeft'||code==='KeyA'||code==='KeyH';
     const right= code==='ArrowRight'||code==='KeyD'||code==='KeyL';
-    const reset= code==='KeyR';
-
     if (up||down||left||right) {
       const dx = right?1:left?-1:0;
       const dy = down?1:up?-1:0;
@@ -1642,13 +1723,16 @@ function handleKey(code, repeat) {
         moveAllPlayers(dx, dy);
       }
     }
-    if (reset && !repeat) {
-      if (doUndo()) { gState='rewind'; gStateT=0; undosPerSec=UNDOS_INITIAL; playSound('lose'); }
-    }
   }
 }
 window.addEventListener('keyup', e => {
-  if (e.code==='KeyR' && SCENE==='game' && gState==='rewind') gState='normal';
+  const undoRewind = e.code==='KeyZ' || e.code==='KeyR' || e.code==='KeyU';
+  if (!undoRewind) return;
+  if (rewindHoldKey === e.code) {
+    rewindHoldKey = null;
+    rewindHoldRepeats = 0;
+  }
+  if (SCENE==='game' && gState==='rewind') gState='normal';
 });
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -1747,6 +1831,7 @@ function drawOptions(r, screenW, screenH) {
   const mPct = Math.round(musicVolume*100);
   const sPct = Math.round(sfxVolume*100);
   const labels = [
+    `max scale ${maxScale}`,
     `music volume ${mPct}`,
     `sfx volume ${sPct}`,
     'back',
@@ -1771,21 +1856,19 @@ function drawLevelSelect(r, screenW, screenH) {
   const ox = menuScrollX, oy = menuScrollY;
   const LINE=6;
 
+  // Draw all non-selected previews first.
   for (let wi=0; wi<WORLD_DATA.length; wi++) {
     const world = WORLD_DATA[wi];
     // World name
     r.text(world.name.toLowerCase(), 5+screenW*0.05, oy+(SPY+BTN)*wi-32, 3, 1);
 
     for (let li=0; li<world.levels.length; li++) {
+      if (wi===selWorld && li===selLevel) continue;
       const bx = ox+(SPX+BTN)*li, by = oy+(SPY+BTN)*wi;
-      const isSel = wi===selWorld && li===selLevel;
       const isDone = completed[wi][li];
-      let dilate = 0;
-      if (isSel) dilate = slowStop(clamp(timeSinceSelect/0.25,0,1))*20;
-
-      const bxd=bx-dilate, byd=by-dilate, bwd=BTN+dilate*2, bhd=BTN+dilate*2;
+      const bxd=bx, byd=by, bwd=BTN, bhd=BTN;
       // Border
-      const bc = isSel ? [1,0.42,0.42] : isDone ? [0.84,1,0.67] : [0.07,0.12,0.2];
+      const bc = isDone ? [0.84,1,0.67] : [0.07,0.12,0.2];
       r.rect(bxd-LINE, byd-LINE, bwd+LINE*2, bhd+LINE*2, bc[0],bc[1],bc[2]);
       // Preview
       const fi = flatLevelIndex(wi, li);
@@ -1798,19 +1881,53 @@ function drawLevelSelect(r, screenW, screenH) {
       if (!isDone) r.rect(bxd,byd,bwd,bhd, 0,0,0,0.5);
     }
   }
+
+  // Draw selected preview last so expanded frame sits above neighbors.
+  const wi = selWorld, li = selLevel;
+  const isDone = completed[wi][li];
+  const bx = ox+(SPX+BTN)*li, by = oy+(SPY+BTN)*wi;
+  const dilate = slowStop(clamp(timeSinceSelect/0.25,0,1))*20;
+  const bxd=bx-dilate, byd=by-dilate, bwd=BTN+dilate*2, bhd=BTN+dilate*2;
+  r.rect(bxd-LINE, byd-LINE, bwd+LINE*2, bhd+LINE*2, 1,0.42,0.42);
+  const fi = flatLevelIndex(wi, li);
+  if (r.previews[fi]) {
+    r.spriteTex(r.previews[fi], bxd, byd, bwd, bhd);
+  } else {
+    r.rect(bxd, byd, bwd, bhd, 0.1,0.1,0.2);
+  }
+  if (!isDone) r.rect(bxd,byd,bwd,bhd, 0,0,0,0.5);
+}
+
+function drawRewindEffect(r, screenW, screenH, t) {
+  const numBars = 6;
+  const barH = 4;
+  const slowness = 10;
+  const spatialReps = 3;
+  r.rect(0,0,screenW,screenH, 0.5,0.5,0.5,0.25);
+  for (let i=0;i<numBars;i++) {
+    const phase = hashF(i, 0, slowness);
+    const tp = (t + phase) / slowness;
+    const iter = Math.floor(tp);
+    const startY = hashI(9875*i + 890734*iter, 0, Math.max(1, spatialReps*screenH));
+    const endY = hashI(9875*i + 890734*(iter+1), 0, Math.max(1, spatialReps*screenH));
+    const y = Math.floor(lerp(startY, endY, slowStartStop3(frac(tp)))) % screenH;
+    r.rect(0, y, screenW, barH, 1,1,1,1);
+  }
+  if (frac(t) < 0.5) {
+    r.sprite(...SP.rewind, 32, 32, 64, 64);
+  }
 }
 
 function drawGameScene(r, screenW, screenH) {
-  const {scale, tsize, xo, yo} = calcScaleAndOffset(gW, gH, screenW, screenH);
+  const {scale, tsize, xo, yo} = calcScaleAndOffset(gW, gH, screenW, screenH, maxScale);
   drawBackground(r, tsize, xo, yo, screenW, screenH);
   drawLevel(r, {W:gW,H:gH,tiles:gTiles,entities:gEntities}, xo, yo, tsize, scale,
             gState==='animate' ? gAnimT : 1, gTime, gPlayerFacesLeft);
   drawSnowflakes(r, absTime, snowXo, screenW, screenH);
 
-  // Rewind flash
+  // Rewind effect (reference style: bars + overlay + icon blink)
   if (gState==='rewind') {
-    const flash = 0.3*Math.abs(Math.sin(absTime*20));
-    r.rect(0,0,screenW,screenH, 0.5,0.5,1,flash);
+    drawRewindEffect(r, screenW, screenH, absTime);
   }
 
   // Level title
@@ -1830,12 +1947,16 @@ function drawGameScene(r, screenW, screenH) {
   // Victory
   if (gState==='celebrate'||gState==='gloat') {
     fw.draw(r, screenW, screenH);
-    const nt = gState==='gloat' ? 1 : slowStop(clamp(gStateT/CELEBRATE_T,0,1));
-    const ts2 = r.textSize('winner', scale2, sp);
-    const wx = screenW/2, wy = screenH/2;
-    // Draw "winner" scaled + rotated — fake it with scale
-    const wscale = Math.round(nt*scale2*2);
-    if (wscale>0) r.textCentered('winner', wx, wy, wscale, sp);
+    if (!winnerTex) return;
+    const nt = gState==='gloat' ? 1 : slowStop2(clamp(gStateT/CELEBRATE_T,0,1));
+    const startX = hashF(gVictories + sessionSeed, 0, screenW);
+    const startY = hashF(gVictories + sessionSeed, 0, screenH);
+    const wx = lerp(startX, screenW/2, nt);
+    const wy = lerp(startY, screenH/2, nt);
+    const ww = Math.max(1, winnerTex.w * nt * 2);
+    const wh = Math.max(1, winnerTex.h * nt * 2);
+    const angle = nt * 360 * 2;
+    r.spriteTexRot(winnerTex, wx, wy, ww, wh, angle, 1);
   }
 }
 
@@ -1880,6 +2001,7 @@ async function main() {
 
   r.loadSpritesheet(ssImg);
   r.loadFont(fontImg);
+  winnerTex = r.buildTextTexture('winner', 6, 1);
 
   // Parse all levels
   allParsed = [];

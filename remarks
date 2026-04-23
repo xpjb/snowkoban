@@ -30,14 +30,20 @@ needs to save progress in local storage, probably analagous to however reference
 
 starting window size and resizing changes the level of zoom permanently
 
-
-credit james etc
 selected level draw in front?
 
+---------------
+player flow: automatic start next level
+the snow sound - no didnt the game use one of the beep sounds. check what the reference did
+pretty sure the undo sound is wrong too. Theres like this cursed sound and it triggers every time you press. the normal pop sound is there though. just check what the reference did.
+undo - allow z to also undo the same way as r does, count z as r basically. oh fuk it has u. okay well just use the sound u was causing. u z and r can all be the same thing but it should go into z/r mode if held too.
+wrap the menu selection on the main sc
+maybe the snow is a bit smaller
 
-
-
-
+--------
+--------------
+rendered levels do have mixels but i guess i dont care that much lmao
+credit james etc
 
 ----
 snowkoban ideas for main screen yea
@@ -45,3 +51,8 @@ journey mode also
 diagetic main menu
 instructions on the ground, arrows to move
 friendly elves to talk to where they open the settings modal or whatever
+
+
+----------
+its another example of ai clearing out the backlog. <Ship Snowkoban>, etc.
+Todo I might make a UGC portal and level editor
