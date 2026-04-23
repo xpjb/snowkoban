@@ -14,6 +14,31 @@ and also like
 
 start and options on main screen, buttons needed. options to have volume and whatnot
 
+-------------
+
+i really didnt like the sound of the change about 'making sprite magenta threshold less absolute' i mean what. its like a png. it is absolute. the reference didnt need that, etc. i guess it fixed it but idk. Just sus that it was needed thats all
+
+Evaluate these changes with respect to the reference
+
+'winner' text lerp is kind of slower
+weird line in sprite quads for some reason along the hypotenuse
+horrible sound was invented for the movement - wasnt there a beep or something in the original one
+the rewind animation is also horrible, it just flickers the screen, the original had a cool rewind thing
+reflections are hard to see, they looked better in the original one.
+
+needs to save progress in local storage, probably analagous to however reference did it
+
+starting window size and resizing changes the level of zoom permanently
+
+
+credit james etc
+selected level draw in front?
+
+
+
+
+
+
 ----
 snowkoban ideas for main screen yea
 journey mode also

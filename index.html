@@ -859,7 +859,7 @@ function checkVictory(entities) {
 }
 
 function deepCopyEntities(entities) {
-  return entities.map(e => ({...e}));
+  return Array.isArray(entities) ? entities.map(e => ({...e})) : [];
 }
 
 // ── WebGL renderer ────────────────────────────────────────────────────────────
@@ -956,14 +956,16 @@ class Renderer {
   }
 
   loadFont(img) {
-    // Replace magenta with transparent
+    // Replace magenta-ish key color with transparent to avoid purple fringe.
     const c = document.createElement('canvas');
     c.width = img.width; c.height = img.height;
     const ctx = c.getContext('2d');
     ctx.drawImage(img,0,0);
     const id = ctx.getImageData(0,0,img.width,img.height);
-    for (let i=0;i<id.data.length;i+=4)
-      if (id.data[i]===255&&id.data[i+1]===0&&id.data[i+2]===255) id.data[i+3]=0;
+    for (let i=0;i<id.data.length;i+=4) {
+      const r = id.data[i], g = id.data[i+1], b = id.data[i+2];
+      if (r > 220 && g < 90 && b > 220) id.data[i+3] = 0;
+    }
     ctx.putImageData(id,0,0);
     this.fontTex = this._upload(c);
     this.fontW = img.width; this.fontH = img.height;
@@ -1327,8 +1329,18 @@ const sfxBuffers = {};
 const MUSIC_FILES = ['assets/Tune_4.ogg','assets/Tune_5.ogg','assets/Tune_6.ogg'];
 let musicIdx = 0;
 const musicEl = new Audio();
-musicEl.volume = 0.4;
+let musicVolume = 0.4;
+let sfxVolume = 1.0;
+musicEl.volume = musicVolume;
 let audioUnlocked = false;
+
+function setMusicVolume(v) {
+  musicVolume = clamp(v, 0, 1);
+  musicEl.volume = musicVolume;
+}
+function setSfxVolume(v) {
+  sfxVolume = clamp(v, 0, 1);
+}
 
 function unlockAudio() {
   if (audioUnlocked) return;
@@ -1375,7 +1387,7 @@ function playSound(name) {
   const src = audioCtx.createBufferSource();
   src.buffer = s.buf;
   const gain = audioCtx.createGain();
-  gain.gain.value = s.vol;
+  gain.gain.value = s.vol * sfxVolume;
   src.connect(gain); gain.connect(audioCtx.destination);
   src.start();
 }
@@ -1385,21 +1397,41 @@ function playSound(name) {
 const completed = WORLD_DATA.map(w => new Array(w.levels.length).fill(false));
 
 function saveProgress() {
-  try { localStorage.setItem('snowkoban', JSON.stringify(completed)); } catch(e){}
+  try {
+    localStorage.setItem('snowkoban', JSON.stringify({
+      completed,
+      settings: {musicVolume, sfxVolume},
+    }));
+  } catch(e){}
 }
 function loadProgress() {
   try {
     const d = JSON.parse(localStorage.getItem('snowkoban')||'null');
     if (!d) return;
-    for (let wi=0;wi<Math.min(d.length,completed.length);wi++)
-      for (let li=0;li<Math.min(d[wi].length,completed[wi].length);li++)
-        completed[wi][li] = !!d[wi][li];
+    if (Array.isArray(d)) {
+      for (let wi=0;wi<Math.min(d.length,completed.length);wi++)
+        for (let li=0;li<Math.min(d[wi].length,completed[wi].length);li++)
+          completed[wi][li] = !!d[wi][li];
+      return;
+    }
+    const comp = d.completed;
+    if (Array.isArray(comp)) {
+      for (let wi=0;wi<Math.min(comp.length,completed.length);wi++)
+        for (let li=0;li<Math.min(comp[wi].length,completed[wi].length);li++)
+          completed[wi][li] = !!comp[wi][li];
+    }
+    if (d.settings) {
+      if (typeof d.settings.musicVolume === 'number') setMusicVolume(d.settings.musicVolume);
+      if (typeof d.settings.sfxVolume === 'number') setSfxVolume(d.settings.sfxVolume);
+    }
   } catch(e){}
 }
 
 // ── App state ─────────────────────────────────────────────────────────────────
-let SCENE = 'menu'; // 'menu' | 'levelselect' | 'game'
+let SCENE = 'menu'; // 'menu' | 'options' | 'levelselect' | 'game'
 let TRANS = null;   // {from, to, t, dur}
+let menuSelection = 0;
+let optionsSelection = 0;
 
 // Level select state
 let selWorld = 0, selLevel = 0;
@@ -1448,8 +1480,9 @@ function setScene(to) {
 
 function startGame(wi, li) {
   selWorld = wi; selLevel = li;
-  const parsed = allParsed[flatLevelIndex(wi, li)];
-  if (!parsed) return;
+  const entry = allParsed[flatLevelIndex(wi, li)];
+  const parsed = entry ? entry.parsed : null;
+  if (!parsed) return false;
   gLevel = parsed;
   gW = parsed.W; gH = parsed.H;
   gTiles = parsed.tiles;
@@ -1463,6 +1496,7 @@ function startGame(wi, li) {
   gTitleState = 'in'; gTitleT = 0;
   gVictories = 0;
   fw.reset(); fwTimer = 0;
+  return true;
 }
 
 function moveAllPlayers(dx, dy) {
@@ -1515,8 +1549,44 @@ function handleKey(code, repeat) {
   if (TRANS) return;
 
   if (SCENE === 'menu') {
-    if (code==='Enter'||code==='Space'||code==='KeyZ') {
-      playSound('msel'); setScene('levelselect');
+    const up = code==='ArrowUp'||code==='KeyW'||code==='KeyK';
+    const down = code==='ArrowDown'||code==='KeyS'||code==='KeyJ';
+    const sel = code==='Enter'||code==='Space'||code==='KeyZ';
+    const menuItems = ['start', 'options'];
+    if (up && menuSelection > 0) { menuSelection--; playSound('mmove'); }
+    if (down && menuSelection < menuItems.length-1) { menuSelection++; playSound('mmove'); }
+    if (sel) {
+      playSound('msel');
+      if (menuSelection === 0) setScene('levelselect');
+      else setScene('options');
+    }
+    return;
+  }
+
+  if (SCENE === 'options') {
+    const up = code==='ArrowUp'||code==='KeyW'||code==='KeyK';
+    const down = code==='ArrowDown'||code==='KeyS'||code==='KeyJ';
+    const left = code==='ArrowLeft'||code==='KeyA'||code==='KeyH';
+    const right = code==='ArrowRight'||code==='KeyD'||code==='KeyL';
+    const sel = code==='Enter'||code==='Space'||code==='KeyZ';
+    const esc = code==='Escape';
+    const maxOpt = 2;
+    if (esc) { playSound('mmove'); setScene('menu'); return; }
+    if (up && optionsSelection > 0) { optionsSelection--; playSound('mmove'); }
+    if (down && optionsSelection < maxOpt) { optionsSelection++; playSound('mmove'); }
+    if ((left || right || sel) && optionsSelection === 0) {
+      const delta = left ? -0.04 : 0.04;
+      setMusicVolume(musicVolume + delta);
+      saveProgress();
+      playSound('msel');
+    } else if ((left || right || sel) && optionsSelection === 1) {
+      const delta = left ? -0.04 : 0.04;
+      setSfxVolume(sfxVolume + delta);
+      saveProgress();
+      playSound('msel');
+    } else if (sel && optionsSelection === 2) {
+      playSound('msel');
+      setScene('menu');
     }
     return;
   }
@@ -1540,7 +1610,12 @@ function handleKey(code, repeat) {
       if (selLevel<WORLD_DATA[selWorld].levels.length-1) { selLevel++; playSound('mmove'); timeSinceSelect=0; }
       else if (selWorld<WORLD_DATA.length-1) { selWorld++; selLevel=0; playSound('mmove'); timeSinceSelect=0; }
     }
-    if (sel) { playSound('msel'); startGame(selWorld, selLevel); setScene('game'); }
+    if (sel) {
+      if (startGame(selWorld, selLevel)) {
+        playSound('msel');
+        setScene('game');
+      }
+    }
     return;
   }
 
@@ -1632,11 +1707,58 @@ function drawMenu(r, screenW, screenH) {
   const ts = 16*8;
   drawBackground(r, ts, 0, 0, screenW, screenH);
   drawSnowflakes(r, absTime, snowXo, screenW, screenH);
-  // Title
-  const title='snowkoban';
-  r.textCentered(title, screenW/2, screenH/3-24, 6, 1);
-  // "press enter to play"
-  r.textCentered('press enter to play', screenW/2, screenH/2+20, 3, 1);
+  r.rect(0,0,screenW,screenH, 0,0,0,0.22);
+  r.textCentered('snowkoban', screenW/2, screenH/4, 6, 1);
+
+  const labels = ['start', 'options'];
+  const line = 6;
+  const btnW = Math.floor(screenW*0.45);
+  const btnH = Math.max(58, Math.floor(screenH*0.095));
+  const paneX = Math.floor(screenW/2 - btnW/2);
+  const paneStartY = Math.floor(screenH*0.37);
+  const gap = Math.floor(btnH*0.32);
+  for (let i=0;i<labels.length;i++) {
+    const y = paneStartY + i*(btnH+gap);
+    const isSel = i===menuSelection;
+    const border = isSel ? [1,0.42,0.42] : [0.07,0.12,0.2];
+    const fill = isSel ? [0.16,0.2,0.32,0.95] : [0.06,0.09,0.17,0.9];
+    r.rect(paneX-line, y-line, btnW+line*2, btnH+line*2, border[0], border[1], border[2], 1);
+    r.rect(paneX, y, btnW, btnH, fill[0], fill[1], fill[2], fill[3]);
+    r.textCentered(labels[i], screenW/2, y+btnH/2, 4, 1);
+  }
+}
+
+function drawOptions(r, screenW, screenH) {
+  const ts = 16*8;
+  drawBackground(r, ts, 0, 0, screenW, screenH);
+  drawSnowflakes(r, absTime, snowXo, screenW, screenH);
+  r.rect(0,0,screenW,screenH, 0,0,0,0.28);
+
+  r.textCentered('options', screenW/2, screenH/5, 5, 1);
+  r.textCentered('left right to adjust', screenW/2, screenH/5 + 44, 2, 1);
+
+  const line = 6;
+  const btnW = Math.floor(screenW*0.56);
+  const btnH = Math.max(52, Math.floor(screenH*0.085));
+  const paneX = Math.floor(screenW/2 - btnW/2);
+  const paneStartY = Math.floor(screenH*0.34);
+  const gap = Math.floor(btnH*0.28);
+
+  const mPct = Math.round(musicVolume*100);
+  const sPct = Math.round(sfxVolume*100);
+  const labels = [
+    `music volume ${mPct}`,
+    `sfx volume ${sPct}`,
+    'back',
+  ];
+  for (let i=0;i<labels.length;i++) {
+    const y = paneStartY + i*(btnH+gap);
+    const isSel = i===optionsSelection;
+    const border = isSel ? [1,0.42,0.42] : [0.07,0.12,0.2];
+    r.rect(paneX-line, y-line, btnW+line*2, btnH+line*2, border[0], border[1], border[2], 1);
+    r.rect(paneX, y, btnW, btnH, 0.06,0.09,0.17,0.9);
+    r.textCentered(labels[i], screenW/2, y+btnH/2, 3, 1);
+  }
 }
 
 function drawLevelSelect(r, screenW, screenH) {
@@ -1644,6 +1766,7 @@ function drawLevelSelect(r, screenW, screenH) {
   const ts = 16*8;
   drawBackground(r, ts, 0, 0, screenW, screenH);
   drawSnowflakes(r, absTime, snowXo - menuScrollX, screenW, screenH);
+  r.rect(0,0,screenW,screenH, 0,0,0,0.16);
 
   const ox = menuScrollX, oy = menuScrollY;
   const LINE=6;
@@ -1728,6 +1851,7 @@ function drawTransition(r, screenW, screenH, from, to, t) {
 
 function drawSceneByName(r, screenW, screenH, name) {
   if (name==='menu')        drawMenu(r, screenW, screenH);
+  else if (name==='options') drawOptions(r, screenW, screenH);
   else if (name==='levelselect') drawLevelSelect(r, screenW, screenH);
   else if (name==='game')   drawGameScene(r, screenW, screenH);
 }
