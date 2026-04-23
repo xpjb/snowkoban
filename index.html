@@ -883,7 +883,10 @@ precision highp float;
 uniform sampler2D u_tex;
 varying vec2 v_uv;
 varying vec4 v_col;
-void main(){ gl_FragColor=texture2D(u_tex,v_uv)*v_col; }`;
+void main(){
+  vec4 c = texture2D(u_tex,v_uv)*v_col;
+  gl_FragColor = c;
+}`;
 
 const MAX_QUADS = 16384;
 const FPV = 9; // floats per vertex: x,y,z,u,v,r,g,b,a
@@ -891,7 +894,7 @@ const FPV = 9; // floats per vertex: x,y,z,u,v,r,g,b,a
 class Renderer {
   constructor(canvas) {
     this.canvas = canvas;
-    const gl = canvas.getContext('webgl', {alpha:false});
+    const gl = canvas.getContext('webgl', {alpha:false, antialias:false});
     if (!gl) throw new Error('WebGL not available');
     this.gl = gl;
 
@@ -1058,25 +1061,28 @@ class Renderer {
   }
 
   sprite(sx,sy,sw,sh, dx,dy,dw,dh, flipH=false,flipV=false, alpha=1, z=0) {
-    dx = Math.round(dx); dy = Math.round(dy); dw = Math.round(dw); dh = Math.round(dh);
+    const x0 = Math.round(dx), y0 = Math.round(dy);
+    const x1 = Math.round(dx + dw), y1 = Math.round(dy + dh);
     this._useTex(this.ssTex);
     const W=this.ssW, H=this.ssH;
     let u0=sx/W, u1=(sx+sw)/W, v0=sy/H, v1=(sy+sh)/H;
     if (flipH){const t=u0;u0=u1;u1=t;}
     if (flipV){const t=v0;v0=v1;v1=t;}
-    this._quad(dx,dy,dx+dw,dy+dh, u0,v0,u1,v1, 1,1,1,alpha, z);
+    this._quad(x0,y0,x1,y1, u0,v0,u1,v1, 1,1,1,alpha, z);
   }
 
   spriteTex(texObj, dx,dy,dw,dh, alpha=1, z=0) {
-    dx = Math.round(dx); dy = Math.round(dy); dw = Math.round(dw); dh = Math.round(dh);
+    const x0 = Math.round(dx), y0 = Math.round(dy);
+    const x1 = Math.round(dx + dw), y1 = Math.round(dy + dh);
     this._useTex(texObj.tex);
-    this._quad(dx,dy,dx+dw,dy+dh, 0,0,1,1, 1,1,1,alpha, z);
+    this._quad(x0,y0,x1,y1, 0,0,1,1, 1,1,1,alpha, z);
   }
 
   rect(x,y,w,h, r,g,b,a=1, z=0) {
-    x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
+    const x0 = Math.round(x), y0 = Math.round(y);
+    const x1 = Math.round(x + w), y1 = Math.round(y + h);
     this._useTex(this.whiteTex);
-    this._quad(x,y,x+w,y+h, 0,0,0,0, r,g,b,a, z);
+    this._quad(x0,y0,x1,y1, 0,0,0,0, r,g,b,a, z);
   }
 
   // Draw text using bitmap font (7×8 chars)
