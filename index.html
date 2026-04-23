@@ -867,6 +867,7 @@ function deepCopyEntities(entities) {
 // ── WebGL renderer ────────────────────────────────────────────────────────────
 const VS = `
 attribute vec2 a_pos;
+attribute float a_z;
 attribute vec2 a_uv;
 attribute vec4 a_col;
 uniform vec2 u_res;
@@ -874,7 +875,7 @@ varying vec2 v_uv;
 varying vec4 v_col;
 void main(){
   vec2 c=(a_pos/u_res)*2.0-1.0;
-  gl_Position=vec4(c.x,-c.y,0.0,1.0);
+  gl_Position=vec4(c.x,-c.y,a_z,1.0);
   v_uv=a_uv; v_col=a_col;
 }`;
 const FS = `
@@ -885,7 +886,7 @@ varying vec4 v_col;
 void main(){ gl_FragColor=texture2D(u_tex,v_uv)*v_col; }`;
 
 const MAX_QUADS = 16384;
-const FPV = 8; // floats per vertex: x,y,u,v,r,g,b,a
+const FPV = 9; // floats per vertex: x,y,z,u,v,r,g,b,a
 
 class Renderer {
   constructor(canvas) {
@@ -896,6 +897,9 @@ class Renderer {
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.clearDepth(1.0);
 
     const mkSh = (type, src) => {
       const s = gl.createShader(type);
@@ -910,6 +914,7 @@ class Renderer {
     gl.linkProgram(prog);
     this.prog = prog;
     this.aPos = gl.getAttribLocation(prog,'a_pos');
+    this.aZ   = gl.getAttribLocation(prog,'a_z');
     this.aUV  = gl.getAttribLocation(prog,'a_uv');
     this.aCol = gl.getAttribLocation(prog,'a_col');
     this.uRes = gl.getUniformLocation(prog,'u_res');
@@ -1035,43 +1040,43 @@ class Renderer {
     if (this.curTex !== t) { this.flush(); this.curTex = t; }
   }
 
-  _push(x,y,u,v,r,g,b,a) {
+  _push(x,y,z,u,v,r,g,b,a) {
     const i = this.count * FPV;
-    this.buf[i]=x; this.buf[i+1]=y; this.buf[i+2]=u; this.buf[i+3]=v;
-    this.buf[i+4]=r; this.buf[i+5]=g; this.buf[i+6]=b; this.buf[i+7]=a;
+    this.buf[i]=x; this.buf[i+1]=y; this.buf[i+2]=z; this.buf[i+3]=u; this.buf[i+4]=v;
+    this.buf[i+5]=r; this.buf[i+6]=g; this.buf[i+7]=b; this.buf[i+8]=a;
     this.count++;
   }
 
-  _quad(x0,y0,x1,y1, u0,v0,u1,v1, r,g,b,a) {
-    this._push(x0,y0,u0,v0,r,g,b,a);
-    this._push(x1,y0,u1,v0,r,g,b,a);
-    this._push(x0,y1,u0,v1,r,g,b,a);
-    this._push(x1,y0,u1,v0,r,g,b,a);
-    this._push(x1,y1,u1,v1,r,g,b,a);
-    this._push(x0,y1,u0,v1,r,g,b,a);
+  _quad(x0,y0,x1,y1, u0,v0,u1,v1, r,g,b,a, z=0) {
+    this._push(x0,y0,z,u0,v0,r,g,b,a);
+    this._push(x1,y0,z,u1,v0,r,g,b,a);
+    this._push(x0,y1,z,u0,v1,r,g,b,a);
+    this._push(x1,y0,z,u1,v0,r,g,b,a);
+    this._push(x1,y1,z,u1,v1,r,g,b,a);
+    this._push(x0,y1,z,u0,v1,r,g,b,a);
     if (this.count/6 >= MAX_QUADS-1) this.flush();
   }
 
-  sprite(sx,sy,sw,sh, dx,dy,dw,dh, flipH=false,flipV=false, alpha=1) {
+  sprite(sx,sy,sw,sh, dx,dy,dw,dh, flipH=false,flipV=false, alpha=1, z=0) {
     dx = Math.round(dx); dy = Math.round(dy); dw = Math.round(dw); dh = Math.round(dh);
     this._useTex(this.ssTex);
     const W=this.ssW, H=this.ssH;
     let u0=sx/W, u1=(sx+sw)/W, v0=sy/H, v1=(sy+sh)/H;
     if (flipH){const t=u0;u0=u1;u1=t;}
     if (flipV){const t=v0;v0=v1;v1=t;}
-    this._quad(dx,dy,dx+dw,dy+dh, u0,v0,u1,v1, 1,1,1,alpha);
+    this._quad(dx,dy,dx+dw,dy+dh, u0,v0,u1,v1, 1,1,1,alpha, z);
   }
 
-  spriteTex(texObj, dx,dy,dw,dh, alpha=1) {
+  spriteTex(texObj, dx,dy,dw,dh, alpha=1, z=0) {
     dx = Math.round(dx); dy = Math.round(dy); dw = Math.round(dw); dh = Math.round(dh);
     this._useTex(texObj.tex);
-    this._quad(dx,dy,dx+dw,dy+dh, 0,0,1,1, 1,1,1,alpha);
+    this._quad(dx,dy,dx+dw,dy+dh, 0,0,1,1, 1,1,1,alpha, z);
   }
 
-  rect(x,y,w,h, r,g,b,a=1) {
+  rect(x,y,w,h, r,g,b,a=1, z=0) {
     x = Math.round(x); y = Math.round(y); w = Math.round(w); h = Math.round(h);
     this._useTex(this.whiteTex);
-    this._quad(x,y,x+w,y+h, 0,0,0,0, r,g,b,a);
+    this._quad(x,y,x+w,y+h, 0,0,0,0, r,g,b,a, z);
   }
 
   // Draw text using bitmap font (7×8 chars)
@@ -1092,24 +1097,24 @@ class Renderer {
     }
   }
 
-  _quad4(x0,y0, x1,y1, x2,y2, x3,y3, u0,v0,u1,v1, r,g,b,a) {
-    this._push(x0,y0,u0,v0,r,g,b,a);
-    this._push(x1,y1,u1,v0,r,g,b,a);
-    this._push(x2,y2,u0,v1,r,g,b,a);
-    this._push(x1,y1,u1,v0,r,g,b,a);
-    this._push(x3,y3,u1,v1,r,g,b,a);
-    this._push(x2,y2,u0,v1,r,g,b,a);
+  _quad4(x0,y0, x1,y1, x2,y2, x3,y3, u0,v0,u1,v1, r,g,b,a, z=0) {
+    this._push(x0,y0,z,u0,v0,r,g,b,a);
+    this._push(x1,y1,z,u1,v0,r,g,b,a);
+    this._push(x2,y2,z,u0,v1,r,g,b,a);
+    this._push(x1,y1,z,u1,v0,r,g,b,a);
+    this._push(x3,y3,z,u1,v1,r,g,b,a);
+    this._push(x2,y2,z,u0,v1,r,g,b,a);
     if (this.count/6 >= MAX_QUADS-1) this.flush();
   }
 
-  spriteTexRot(texObj, cx, cy, dw, dh, angleDeg=0, alpha=1) {
+  spriteTexRot(texObj, cx, cy, dw, dh, angleDeg=0, alpha=1, z=0) {
     const w = dw*0.5, h = dh*0.5;
     const a = angleDeg*Math.PI/180;
     const cs = Math.cos(a), sn = Math.sin(a);
     const rot = (x,y) => ({x: cx + x*cs - y*sn, y: cy + x*sn + y*cs});
     const p0 = rot(-w,-h), p1 = rot(w,-h), p2 = rot(-w,h), p3 = rot(w,h);
     this._useTex(texObj.tex);
-    this._quad4(p0.x,p0.y,p1.x,p1.y,p2.x,p2.y,p3.x,p3.y, 0,0,1,1, 1,1,1,alpha);
+    this._quad4(p0.x,p0.y,p1.x,p1.y,p2.x,p2.y,p3.x,p3.y, 0,0,1,1, 1,1,1,alpha, z);
   }
 
   buildTextTexture(str, scale=3, spacing=1) {
@@ -1157,10 +1162,12 @@ class Renderer {
     const stride = FPV*4;
     gl.enableVertexAttribArray(this.aPos);
     gl.vertexAttribPointer(this.aPos,2,gl.FLOAT,false,stride,0);
+    gl.enableVertexAttribArray(this.aZ);
+    gl.vertexAttribPointer(this.aZ,1,gl.FLOAT,false,stride,8);
     gl.enableVertexAttribArray(this.aUV);
-    gl.vertexAttribPointer(this.aUV,2,gl.FLOAT,false,stride,8);
+    gl.vertexAttribPointer(this.aUV,2,gl.FLOAT,false,stride,12);
     gl.enableVertexAttribArray(this.aCol);
-    gl.vertexAttribPointer(this.aCol,4,gl.FLOAT,false,stride,16);
+    gl.vertexAttribPointer(this.aCol,4,gl.FLOAT,false,stride,20);
     gl.drawArrays(gl.TRIANGLES, 0, this.count);
     this.count = 0;
   }
@@ -1169,7 +1176,7 @@ class Renderer {
     const gl = this.gl;
     gl.viewport(0,0,this.canvas.width,this.canvas.height);
     gl.clearColor(0,0,0,1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   }
 }
 
@@ -1177,12 +1184,18 @@ class Renderer {
 function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesLeft) {
   const {W,H,tiles,entities} = level;
   const playerFrame = frac(gameTime) > 0.5 ? 1 : 0;
+  const Z_WATER_BG = 0.80;
+  const Z_SUNK = 0.65;
+  const Z_REFLECT = 0.55;
+  const Z_TILE = 0.45;
+  const Z_TARGET = 0.35;
+  const Z_ENTITY = 0.25;
 
   // Ice / water backgrounds
   for (let j=0;j<H;j++) for (let i=0;i<W;i++) {
     const t = tiles[j][i];
-    if (t===T_ICE)   r.sprite(...SP.iceBg,  xo+i*tsize, yo+j*tsize, tsize, tsize);
-    if (t===T_WATER) r.sprite(...SP.waterBg, xo+i*tsize, yo+j*tsize, tsize, tsize);
+    if (t===T_ICE)   r.sprite(...SP.iceBg,  xo+i*tsize, yo+j*tsize, tsize, tsize, false,false,1, Z_WATER_BG);
+    if (t===T_WATER) r.sprite(...SP.waterBg, xo+i*tsize, yo+j*tsize, tsize, tsize, false,false,1, Z_WATER_BG);
   }
 
   // Sunk entities
@@ -1191,7 +1204,7 @@ function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesL
     const px = Math.round(xo + tsize*lerp(e.x-e.pdx, e.x, animT));
     const py = Math.round(yo + tsize*lerp(e.y-e.pdy, e.y, animT));
     const cl = ENTITY_CLIP[e.et] || SP.present;
-    r.sprite(cl[0],cl[1],16,16, px,py,tsize,tsize, false,false, 0.55);
+    r.sprite(cl[0],cl[1],16,16, px,py,tsize,tsize, false,false, 0.55, Z_SUNK);
   }
 
   // Entity reflections
@@ -1200,8 +1213,7 @@ function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesL
     const px = Math.round(xo + tsize*lerp(e.x-e.pdx, e.x, animT));
     const py = Math.round(yo + tsize*lerp(e.y-e.pdy, e.y, animT));
     const bh = ENTITY_BASE_H[e.et] || 0;
-    const reflY = py + tsize - 2*scale*bh + 1;
-    const reflH = Math.max(1, tsize - 1);
+    const reflY = py + tsize - 2*scale*bh;
     let sx, sy;
     if (e.et===ET_PLAYER) {
       const cl = playerFrame ? SP.player1 : SP.player0;
@@ -1211,14 +1223,13 @@ function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesL
       sx=cl[0]; sy=cl[1];
     }
     const flipH = e.et===ET_PLAYER && !playerFacesLeft;
-    // 1px inset margin avoids occasional boundary bleed into next tile.
-    r.sprite(sx,sy,16,16, px,reflY,tsize,reflH, flipH, true, 1.0);
+    r.sprite(sx,sy,16,16, px,reflY,tsize,tsize, flipH, true, 1.0, Z_REFLECT);
   }
 
   // Tiles
   for (let j=0;j<H;j++) for (let i=0;i<W;i++) {
     const cl = TILE_CLIP[tiles[j][i]];
-    if (cl) r.sprite(cl[0],cl[1],16,16, xo+i*tsize, yo+j*tsize, tsize,tsize);
+    if (cl) r.sprite(cl[0],cl[1],16,16, xo+i*tsize, yo+j*tsize, tsize,tsize, false,false,1, Z_TILE);
   }
 
   // Targets first
@@ -1226,7 +1237,7 @@ function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesL
     if (e.et!==ET_TARGET) continue;
     const px = Math.round(xo + tsize*lerp(e.x-e.pdx, e.x, animT));
     const py = Math.round(yo + tsize*lerp(e.y-e.pdy, e.y, animT));
-    r.sprite(...SP.target, px, py, tsize, tsize);
+    r.sprite(...SP.target, px, py, tsize, tsize, false,false,1, Z_TARGET);
   }
 
   // Other entities
@@ -1243,7 +1254,7 @@ function drawLevel(r, level, xo, yo, tsize, scale, animT, gameTime, playerFacesL
       sx=cl[0]; sy=cl[1];
     }
     const flipH = e.et===ET_PLAYER && !playerFacesLeft;
-    r.sprite(sx,sy,16,16, px,py,tsize,tsize, flipH,false, 1);
+    r.sprite(sx,sy,16,16, px,py,tsize,tsize, flipH,false, 1, Z_ENTITY);
   }
 }
 
@@ -1253,7 +1264,7 @@ function drawBackground(r, tsize, xo, yo, screenW, screenH) {
   const startY = (yo % tsize) - tsize;
   for (let x=startX; x<screenW+tsize; x+=tsize)
     for (let y=startY; y<screenH+tsize; y+=tsize)
-      r.sprite(sx,sy,16,16, x,y,tsize,tsize);
+      r.sprite(sx,sy,16,16, x,y,tsize,tsize, false,false,1, 0.95);
 }
 
 function calcScaleAndOffset(levelW, levelH, screenW, screenH, maxScale=8) {
@@ -1287,10 +1298,10 @@ function drawSnowflakes(r, t, xo, screenW, screenH) {
     const sx2 = seed*spacing;
     const x = Math.round(sx2 + h*vxh + sinMag*Math.sin(h*freq+sp2) - xo);
     const y = Math.round(h*(screenH+spacing) - spacing);
-    r.rect(x+s, y,   s, s, 1,1,1,1);
-    r.rect(x,   y+s, s, s, 1,1,1,1);
-    r.rect(x+s, y+2*s,s,s, 1,1,1,1);
-    r.rect(x+2*s,y+s, s, s, 1,1,1,1);
+    r.rect(x+s, y,   s, s, 1,1,1,1, 0.05);
+    r.rect(x,   y+s, s, s, 1,1,1,1, 0.05);
+    r.rect(x+s, y+2*s,s,s, 1,1,1,1, 0.05);
+    r.rect(x+2*s,y+s, s, s, 1,1,1,1, 0.05);
   }
 }
 
