@@ -1520,6 +1520,7 @@ let gHistory = [];
 let gAnimT = 1;
 let gBufDx = 0, gBufDy = 0, gBufWhen = 0;
 const STEP_TIME = 0.1, BUFFER_WINDOW = 0.1;
+let gSlideChainActive = false;
 const CELEBRATE_T = 1.0;
 let gTitleState = 'none'; // 'none'|'in'|'show'|'out'
 let gTitleT = 0;
@@ -1565,6 +1566,7 @@ function startGame(wi, li) {
   gHistory = [];
   gAnimT = 1;
   gBufDx = 0; gBufDy = 0;
+  gSlideChainActive = false;
   gTitleState = 'in'; gTitleT = 0;
   gVictories = 0;
   fw.reset(); fwTimer = 0;
@@ -1580,6 +1582,8 @@ function nextLevelPos(wi, li) {
 
 function moveAllPlayers(dx, dy) {
   let moved = false;
+  // A manual move starts a new animation chain; forced ice movement can set this back.
+  gSlideChainActive = false;
   gHistory.push({entities: deepCopyEntities(gEntities), time: gTime});
   if (gHistory.length > 512) gHistory.shift();
   for (let i=0;i<gEntities.length;i++) {
@@ -1798,6 +1802,7 @@ function updateGame(dt) {
     if (gStateT >= STEP_TIME) {
       // Try ice
       if (doIce(gTiles, gEntities, gW, gH, playSound)) {
+        gSlideChainActive = true;
         levelStep(gTiles, gEntities);
         gState='animate'; gStateT=0;
       } else if (checkVictory(gEntities)) {
@@ -1809,8 +1814,15 @@ function updateGame(dt) {
         fw.reset(); fwTimer=0;
       } else if ((gBufDx||gBufDy) && (absTime-gBufWhen)<BUFFER_WINDOW) {
         const dx=gBufDx, dy=gBufDy; gBufDx=0; gBufDy=0;
+        gSlideChainActive = false;
+        moveAllPlayers(dx, dy);
+      } else if ((gBufDx||gBufDy) && gSlideChainActive) {
+        // Keep buffered input through forced ice movement and apply it once control returns.
+        const dx=gBufDx, dy=gBufDy; gBufDx=0; gBufDy=0;
+        gSlideChainActive = false;
         moveAllPlayers(dx, dy);
       } else {
+        gSlideChainActive = false;
         gState='normal'; gStateT=0;
       }
     }
@@ -1852,7 +1864,7 @@ function drawMenu(r, screenW, screenH) {
     r.textCentered(labels[i], screenW/2, y+btnH/2, 4, 1);
   }
 
-  r.textCentered('wasd to move, z to undo', screenW/2, screenH-72, 3, 1);
+  r.textCentered('wasd to move, z or r to undo', screenW/2, screenH-72, 3, 1);
   r.textCentered('music by j>k', screenW/2, screenH-38, 3, 1);
 }
 
@@ -1974,7 +1986,8 @@ function drawGameScene(r, screenW, screenH) {
 
   // Rewind effect (reference style: bars + overlay + icon blink)
   if (gState==='rewind') {
-    drawRewindEffect(r, screenW, screenH, gInterpTime);
+    // Use wall-time-like clock independent from rewindable game time.
+    drawRewindEffect(r, screenW, screenH, absTime);
   }
 
   // Level title
